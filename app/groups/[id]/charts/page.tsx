@@ -41,6 +41,16 @@ export default async function ChartsPage({
   const byPayer = aggregate(scoped, (e) => e.paid_by);
   const byMonth = aggregate(scoped, (e) => e.expense_date.slice(0, 7));
 
+  // How much each member actually consumed (their share of the expenses).
+  const byConsumer = new Map<string, number>();
+  for (const e of scoped)
+    for (const s of e.splits)
+      byConsumer.set(s.user_id, (byConsumer.get(s.user_id) ?? 0) + toCents(s.amount_owed));
+
+  const count = scoped.length;
+  const avgCents = count ? Math.round(totalCents / count) : 0;
+  const biggestCents = scoped.reduce((m, e) => Math.max(m, toCents(e.amount)), 0);
+
   const monthsSorted = [...byMonth.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(-6);
   const monthMax = Math.max(1, ...monthsSorted.map(([, v]) => v));
 
@@ -64,6 +74,14 @@ export default async function ChartsPage({
             <p className="mt-1 text-xs text-muted">Excludes {otherCurrencies.join(", ")} expenses.</p>
           )}
         </div>
+
+        {totalCents > 0 && (
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            <Stat label="Expenses" value={String(count)} />
+            <Stat label="Average" value={formatMoney(avgCents, primary)} />
+            <Stat label="Biggest" value={formatMoney(biggestCents, primary)} />
+          </div>
+        )}
       </div>
 
       {totalCents === 0 ? (
@@ -108,15 +126,36 @@ export default async function ChartsPage({
           </section>
 
           <section>
+            <h2 className="mb-3 text-sm font-semibold text-muted">By who consumed</h2>
+            <div className="flex flex-col gap-2.5">
+              {[...byConsumer.entries()]
+                .sort((a, b) => b[1] - a[1])
+                .map(([uid, cents]) => (
+                  <Bar
+                    key={uid}
+                    label={profileName(findProfile(members, uid))}
+                    cents={cents}
+                    total={totalCents}
+                    currency={primary}
+                  />
+                ))}
+            </div>
+          </section>
+
+          <section>
             <h2 className="mb-3 text-sm font-semibold text-muted">Last months</h2>
-            <div className="flex items-end justify-between gap-2" style={{ height: 140 }}>
+            <div className="flex items-end justify-between gap-2">
               {monthsSorted.map(([month, cents]) => (
                 <div key={month} className="flex flex-1 flex-col items-center gap-1">
-                  <span className="text-[10px] text-muted">{formatMoney(cents, primary).replace(/\.00$/, "")}</span>
-                  <div
-                    className="w-full rounded-t-md bg-brand"
-                    style={{ height: `${Math.max(4, (cents / monthMax) * 100)}%` }}
-                  />
+                  <span className="text-[10px] text-muted">
+                    {formatMoney(cents, primary).replace(/[.,]00$/, "")}
+                  </span>
+                  <div className="flex h-28 w-full items-end">
+                    <div
+                      className="w-full rounded-t-md bg-brand"
+                      style={{ height: `${Math.max(3, Math.round((cents / monthMax) * 100))}%` }}
+                    />
+                  </div>
                   <span className="text-[10px] text-muted">{monthLabel(month)}</span>
                 </div>
               ))}
@@ -141,6 +180,15 @@ function aggregate<T extends { amount: number }>(
   const m = new Map<string, number>();
   for (const it of items) m.set(keyOf(it), (m.get(keyOf(it)) ?? 0) + toCents(it.amount));
   return m;
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-surface px-2 py-3 text-center">
+      <p className="truncate text-sm font-semibold">{value}</p>
+      <p className="text-[11px] text-muted">{label}</p>
+    </div>
+  );
 }
 
 function monthLabel(ym: string): string {
