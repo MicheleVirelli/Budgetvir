@@ -19,6 +19,7 @@ import {
 import BackHeader from "@/components/BackHeader";
 
 const IGNORE = "__ignore__";
+const CREATE = "__create__";
 
 export default function ImportClient({
   groupId,
@@ -52,7 +53,9 @@ export default function ImportClient({
           mem.email?.split("@")[0].toLowerCase() === name ||
           profileName(mem).toLowerCase().startsWith(name.split(" ")[0]),
       );
-      m[col.index] = match ? match.id : IGNORE;
+      // Unmatched people default to "create as placeholder" so importing a
+      // Splitwise group also brings its people in.
+      m[col.index] = match ? match.id : CREATE;
     }
     return m;
   }
@@ -91,6 +94,41 @@ export default function ImportClient({
   async function runImport() {
     if (!parsed) return;
     setError(null);
+
+    // Resolve the mapping: create placeholder members for any column marked
+    // "create", so their column can point at a real member id.
+    const effective: Record<number, string> = { ...mapping };
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not signed in.");
+
+      for (const col of parsed.personColumns) {
+        if (mapping[col.index] !== CREATE) continue;
+        const id = crypto.randomUUID();
+        const { error: pErr } = await supabase.from("profiles").insert({
+          id,
+          display_name: col.name || "Member",
+          email: null,
+          is_placeholder: true,
+          created_by: user.id,
+        });
+        if (pErr) throw pErr;
+        const { error: mErr } = await supabase
+          .from("group_members")
+          .insert({ group_id: groupId, user_id: id });
+        if (mErr) throw mErr;
+        effective[col.index] = id;
+      }
+    } catch (err) {
+      setError(
+        (err instanceof Error ? err.message : "Could not create members.") +
+          " If this mentions is_placeholder, run migration 0005 in Supabase first.",
+      );
+      return;
+    }
+
     let done = 0;
     let failed = 0;
     setProgress({ done: 0, total: validRows.length });
@@ -105,8 +143,8 @@ export default function ImportClient({
       // Build per-member nets from the mapped columns.
       const netByMember = new Map<string, number>();
       for (const col of parsed.personColumns) {
-        const memberId = mapping[col.index];
-        if (!memberId || memberId === IGNORE) continue;
+        const memberId = effective[col.index];
+        if (!memberId || memberId === IGNORE || memberId === CREATE) continue;
         const cents = toCents(parseMoney(r[col.index] ?? ""));
         netByMember.set(memberId, (netByMember.get(memberId) ?? 0) + cents);
       }
@@ -210,14 +248,15 @@ export default function ImportClient({
                     <select
                       value={mapping[col.index] ?? IGNORE}
                       onChange={(e) => setMapping((m) => ({ ...m, [col.index]: e.target.value }))}
-                      className="max-w-[45%] rounded-lg border border-border bg-bg px-2 py-1.5 text-sm outline-none"
+                      className="max-w-[55%] rounded-lg border border-border bg-bg px-2 py-1.5 text-sm outline-none"
                     >
-                      <option value={IGNORE}>Ignore</option>
+                      <option value={CREATE}>➕ Create “{col.name}”</option>
                       {members.map((mem) => (
                         <option key={mem.id} value={mem.id}>
                           {mem.id === meId ? "You" : profileName(mem)}
                         </option>
                       ))}
+                      <option value={IGNORE}>Ignore</option>
                     </select>
                   </li>
                 ))}
