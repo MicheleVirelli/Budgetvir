@@ -12,6 +12,9 @@ A personalized Splitwise built with Next.js + Supabase, deployed on Vercel.
 4. Paste and run [`supabase/migrations/0003_pro.sql`](supabase/migrations/0003_pro.sql)
    (settlements, comments, activity feed + triggers, recurring expenses,
    categories/notes, group settings, invite/join + recurring RPCs).
+5. Paste and run [`supabase/migrations/0004_fix_group_create.sql`](supabase/migrations/0004_fix_group_create.sql)
+   (lets a group's creator read back their new group and add themselves as the
+   first member — fixes group creation).
 
 > The migrations are idempotent — safe to re-run.
 

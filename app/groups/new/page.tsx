@@ -26,19 +26,21 @@ export default function NewGroupPage() {
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Not signed in.");
 
-      const { data: group, error: gErr } = await supabase
+      // Generate the id client-side so we don't depend on reading the row back
+      // (the SELECT policy needs membership, which we add in the next step).
+      const groupId = crypto.randomUUID();
+
+      const { error: gErr } = await supabase
         .from("groups")
-        .insert({ name: name.trim(), image_url: imageUrl, created_by: user.id })
-        .select("id")
-        .single();
+        .insert({ id: groupId, name: name.trim(), image_url: imageUrl, created_by: user.id });
       if (gErr) throw gErr;
 
       const { error: mErr } = await supabase
         .from("group_members")
-        .insert({ group_id: group.id, user_id: user.id });
+        .insert({ group_id: groupId, user_id: user.id });
       if (mErr) throw mErr;
 
-      router.replace(`/groups/${group.id}`);
+      router.replace(`/groups/${groupId}`);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create group.");
