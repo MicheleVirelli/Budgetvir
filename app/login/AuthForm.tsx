@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { validateSignupEmail } from "@/lib/email";
 
 export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const router = useRouter();
@@ -29,6 +30,13 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
 
     try {
       if (isSignup) {
+        const check = validateSignupEmail(email);
+        if (!check.ok) {
+          setError(check.message ?? "Enter a valid email address.");
+          setLoading(false);
+          return;
+        }
+
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
