@@ -121,7 +121,7 @@ export default function ReceiptScanner({
   }, [items]);
 
   const totalCents = items.reduce((s, it) => s + toCents(parseNum(it.price)), 0);
-  const unassigned = items.some((it) => toCents(parseNum(it.price)) > 0 && it.memberIds.length === 0);
+  const unassigned = items.some((it) => toCents(parseNum(it.price)) !== 0 && it.memberIds.length === 0);
   const canSave = totalCents > 0 && !unassigned && title.trim().length > 0 && !saving;
 
   async function save() {
@@ -162,7 +162,7 @@ export default function ReceiptScanner({
       if (eErr) throw eErr;
 
       const splitRows = [...owed.entries()]
-        .filter(([, cents]) => cents > 0)
+        .filter(([, cents]) => cents !== 0)
         .map(([userId, cents]) => ({
           expense_id: exp.id,
           user_id: userId,
