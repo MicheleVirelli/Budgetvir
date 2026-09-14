@@ -21,6 +21,7 @@ export default function AddMemberForm({
   const [result, setResult] = useState<Profile | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [phName, setPhName] = useState("");
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -73,7 +74,45 @@ export default function AddMemberForm({
     }
   }
 
+  async function handleAddPlaceholder(e: React.FormEvent) {
+    e.preventDefault();
+    const name = phName.trim();
+    if (!name) return;
+    setBusy(true);
+    setStatus(null);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not signed in.");
+
+      const id = crypto.randomUUID();
+      const { error: pErr } = await supabase.from("profiles").insert({
+        id,
+        display_name: name,
+        email: null,
+        is_placeholder: true,
+        created_by: user.id,
+      });
+      if (pErr) throw pErr;
+
+      const { error: mErr } = await supabase
+        .from("group_members")
+        .insert({ group_id: groupId, user_id: id });
+      if (mErr) throw mErr;
+
+      setPhName("");
+      setStatus(`Added ${name}.`);
+      router.refresh();
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : "Could not add placeholder.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
+    <div className="flex flex-col gap-4">
     <div className="flex flex-col gap-3 rounded-2xl bg-surface p-4">
       <p className="text-sm font-medium">Add someone by email</p>
       <form onSubmit={handleSearch} className="flex gap-2">
@@ -111,6 +150,30 @@ export default function AddMemberForm({
       )}
 
       {status && <p className="text-sm text-muted">{status}</p>}
+    </div>
+
+    <div className="flex flex-col gap-3 rounded-2xl bg-surface p-4">
+      <p className="text-sm font-medium">Or add without an account</p>
+      <p className="-mt-1 text-xs text-muted">
+        Just a name — great for someone who isn&apos;t on Budgetvir. You can invite them
+        for real later with the group link.
+      </p>
+      <form onSubmit={handleAddPlaceholder} className="flex gap-2">
+        <input
+          value={phName}
+          onChange={(e) => setPhName(e.target.value)}
+          placeholder="e.g. Giulia"
+          className="min-w-0 flex-1 rounded-xl border border-border bg-bg px-3 py-2.5 outline-none focus:border-brand"
+        />
+        <button
+          type="submit"
+          disabled={busy || !phName.trim()}
+          className="shrink-0 rounded-xl bg-brand px-4 font-semibold text-black disabled:opacity-50"
+        >
+          Add
+        </button>
+      </form>
+    </div>
     </div>
   );
 }

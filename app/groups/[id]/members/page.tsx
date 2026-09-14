@@ -42,8 +42,15 @@ export default async function MembersPage({
                 {profileName(m)}
                 {m.id === me.id && <span className="text-muted"> (you)</span>}
               </p>
-              <p className="truncate text-sm text-muted">{m.email}</p>
+              <p className="truncate text-sm text-muted">
+                {m.is_placeholder ? "No account" : m.email}
+              </p>
             </div>
+            {m.is_placeholder && (
+              <span className="rounded-full bg-surface px-2 py-0.5 text-xs text-muted">
+                placeholder
+              </span>
+            )}
             {m.id === group.created_by && (
               <span className="rounded-full bg-surface px-2 py-0.5 text-xs text-muted">
                 admin

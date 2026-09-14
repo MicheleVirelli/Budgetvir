@@ -68,7 +68,7 @@ export default function AccountForm({ profile }: { profile: Profile }) {
         <label className="flex flex-col gap-1.5">
           <span className="text-sm font-medium text-muted">Email</span>
           <input
-            value={profile.email}
+            value={profile.email ?? ""}
             disabled
             className="rounded-xl border border-border bg-surface px-4 py-3 text-muted"
           />

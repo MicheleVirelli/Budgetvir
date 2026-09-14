@@ -48,8 +48,8 @@ export default function ImportClient({
       const match = members.find(
         (mem) =>
           profileName(mem).toLowerCase() === name ||
-          mem.email.toLowerCase() === name ||
-          mem.email.split("@")[0].toLowerCase() === name ||
+          mem.email?.toLowerCase() === name ||
+          mem.email?.split("@")[0].toLowerCase() === name ||
           profileName(mem).toLowerCase().startsWith(name.split(" ")[0]),
       );
       m[col.index] = match ? match.id : IGNORE;

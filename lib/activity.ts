@@ -28,8 +28,13 @@ export function describeActivity(
       };
     case "comment_added":
       return { icon: "💬", text: `${actor} commented: "${d.body}"` };
-    case "member_joined":
+    case "member_joined": {
+      const addedId = d.user_id != null ? String(d.user_id) : null;
+      if (addedId && addedId !== a.actor_id) {
+        return { icon: "👋", text: `${actor} added ${byId(addedId)}` };
+      }
       return { icon: "👋", text: `${actor} joined the group` };
+    }
     default:
       return { icon: "•", text: `${actor} did something` };
   }

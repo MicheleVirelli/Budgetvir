@@ -160,7 +160,7 @@ export function myNetSummary(
 
 export function profileName(p: Profile | undefined, fallback = "Someone"): string {
   if (!p) return fallback;
-  return p.display_name?.trim() || p.email.split("@")[0] || fallback;
+  return p.display_name?.trim() || p.email?.split("@")[0] || fallback;
 }
 
 const CURRENCY_LOCALE: Record<string, string> = {
