@@ -103,6 +103,7 @@ export interface RecurringExpense {
   split_type: SplitType;
   split_config: { user_id: string; amount_owed: number; raw_value: number | null }[];
   frequency: Frequency;
+  interval_count: number;
   next_run: string;
   active: boolean;
   created_by: string;

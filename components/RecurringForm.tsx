@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import type { Profile, SplitType, Frequency } from "@/lib/types";
+import type { Profile, SplitType, Frequency, ExpenseWithSplits } from "@/lib/types";
 import { computeSplit, validateSplit, toCents, fromCents } from "@/lib/split";
 import { profileName } from "@/lib/balances";
 import BackHeader from "@/components/BackHeader";
@@ -19,32 +19,65 @@ const FREQ: { key: Frequency; label: string }[] = [
   { key: "yearly", label: "Yearly" },
 ];
 
+const UNIT: Record<Frequency, [string, string]> = {
+  daily: ["day", "days"],
+  weekly: ["week", "weeks"],
+  monthly: ["month", "months"],
+  yearly: ["year", "years"],
+};
+
+function intervalUnit(freq: Frequency, countStr: string): string {
+  const n = Math.max(1, parseInt(countStr, 10) || 1);
+  const [one, many] = UNIT[freq];
+  return n === 1 ? one : many;
+}
+
+function initialRows(members: Profile[], initial?: ExpenseWithSplits): SplitRowState[] {
+  return members.map((m) => {
+    const split = initial?.splits.find((s) => s.user_id === m.id);
+    if (!initial) return { userId: m.id, selected: true, value: "" };
+    let value = "";
+    if (split) {
+      if (initial.split_type === "amount") value = String(split.amount_owed);
+      else if (initial.split_type !== "equal") value = split.raw_value != null ? String(split.raw_value) : "";
+    }
+    return { userId: m.id, selected: !!split, value };
+  });
+}
+
 export default function RecurringForm({
   groupId,
   members,
   meId,
   defaultCurrency = "EUR",
+  initial,
 }: {
   groupId: string;
   members: Profile[];
   meId: string;
   defaultCurrency?: string;
+  initial?: ExpenseWithSplits;
 }) {
   const router = useRouter();
   const supabase = createClient();
 
-  const [title, setTitle] = useState("");
-  const [emoji, setEmoji] = useState<string | null>(null);
-  const [category, setCategory] = useState("general");
-  const [amount, setAmount] = useState("");
-  const [currency, setCurrency] = useState(defaultCurrency);
-  const [paidBy, setPaidBy] = useState(meId);
-  const [splitType, setSplitType] = useState<SplitType>("equal");
+  // When starting from an existing expense, default the first occurrence to the
+  // 1st of next month so we don't immediately duplicate that expense.
+  const defaultNext = initial
+    ? new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString().slice(0, 10)
+    : new Date().toISOString().slice(0, 10);
+
+  const [title, setTitle] = useState(initial?.title ?? "");
+  const [emoji, setEmoji] = useState<string | null>(initial?.emoji ?? null);
+  const [category, setCategory] = useState(initial?.category ?? "general");
+  const [amount, setAmount] = useState(initial ? String(initial.amount) : "");
+  const [currency, setCurrency] = useState(initial?.currency ?? defaultCurrency);
+  const [paidBy, setPaidBy] = useState(initial?.paid_by ?? meId);
+  const [splitType, setSplitType] = useState<SplitType>(initial?.split_type ?? "equal");
   const [frequency, setFrequency] = useState<Frequency>("monthly");
-  const [nextRun, setNextRun] = useState(new Date().toISOString().slice(0, 10));
-  const [rows, setRows] = useState<SplitRowState[]>(
-    members.map((m) => ({ userId: m.id, selected: true, value: "" })),
-  );
+  const [intervalCount, setIntervalCount] = useState("1");
+  const [nextRun, setNextRun] = useState(defaultNext);
+  const [rows, setRows] = useState<SplitRowState[]>(() => initialRows(members, initial));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,6 +111,7 @@ export default function RecurringForm({
       split_type: splitType,
       split_config,
       frequency,
+      interval_count: Math.max(1, parseInt(intervalCount, 10) || 1),
       next_run: nextRun,
       created_by: meId,
     });
@@ -93,7 +127,7 @@ export default function RecurringForm({
   return (
     <form onSubmit={submit} className="flex min-h-dvh flex-col">
       <BackHeader
-        title="New recurring expense"
+        title={initial ? "Make recurring" : "New recurring expense"}
         action={
           <button
             type="submit"
@@ -133,25 +167,32 @@ export default function RecurringForm({
 
         <CategoryPicker value={category} onChange={setCategory} />
 
-        <div className="flex gap-2">
-          <label className="flex flex-1 items-center justify-between rounded-xl bg-surface px-4 py-3">
-            <span className="text-sm text-muted">Every</span>
-            <select value={frequency} onChange={(e) => setFrequency(e.target.value as Frequency)} className="bg-transparent text-right font-medium outline-none">
-              {FREQ.map((f) => (
-                <option key={f.key} value={f.key}>{f.label}</option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-1 items-center justify-between rounded-xl bg-surface px-4 py-3">
-            <span className="text-sm text-muted">Start</span>
-            <input
-              type="date"
-              value={nextRun}
-              onChange={(e) => setNextRun(e.target.value)}
-              className="bg-transparent text-right font-medium outline-none [color-scheme:dark]"
-            />
-          </label>
+        <div className="flex items-center gap-2 rounded-xl bg-surface px-4 py-3">
+          <span className="text-sm text-muted">Every</span>
+          <input
+            value={intervalCount}
+            onChange={(e) => setIntervalCount(e.target.value.replace(/[^0-9]/g, ""))}
+            inputMode="numeric"
+            className="w-12 rounded-lg border border-border bg-bg px-2 py-1.5 text-center outline-none focus:border-brand"
+          />
+          <select value={frequency} onChange={(e) => setFrequency(e.target.value as Frequency)} className="flex-1 bg-transparent text-right font-medium outline-none">
+            {FREQ.map((f) => (
+              <option key={f.key} value={f.key}>
+                {intervalUnit(f.key, intervalCount)}
+              </option>
+            ))}
+          </select>
         </div>
+
+        <label className="flex items-center justify-between rounded-xl bg-surface px-4 py-3">
+          <span className="text-sm text-muted">Starting</span>
+          <input
+            type="date"
+            value={nextRun}
+            onChange={(e) => setNextRun(e.target.value)}
+            className="bg-transparent text-right font-medium outline-none [color-scheme:dark]"
+          />
+        </label>
 
         <label className="flex items-center justify-between rounded-xl bg-surface px-4 py-3">
           <span className="text-sm text-muted">Paid by</span>

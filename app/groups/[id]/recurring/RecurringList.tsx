@@ -8,12 +8,17 @@ import { formatMoney } from "@/lib/balances";
 import { expenseIcon } from "@/lib/categories";
 import { toCents } from "@/lib/split";
 
-const FREQ_LABEL: Record<string, string> = {
-  daily: "Daily",
-  weekly: "Weekly",
-  monthly: "Monthly",
-  yearly: "Yearly",
+const UNIT: Record<string, [string, string]> = {
+  daily: ["day", "days"],
+  weekly: ["week", "weeks"],
+  monthly: ["month", "months"],
+  yearly: ["year", "years"],
 };
+
+function everyLabel(freq: string, count: number): string {
+  const [one, many] = UNIT[freq] ?? ["", ""];
+  return count <= 1 ? `Every ${one}` : `Every ${count} ${many}`;
+}
 
 export default function RecurringList({ items }: { items: RecurringExpense[] }) {
   const router = useRouter();
@@ -61,7 +66,7 @@ export default function RecurringList({ items }: { items: RecurringExpense[] }) 
           <div className="min-w-0 flex-1">
             <p className="truncate font-medium">{r.title}</p>
             <p className="text-sm text-muted">
-              {formatMoney(toCents(r.amount), r.currency)} · {FREQ_LABEL[r.frequency]} · next {r.next_run}
+              {formatMoney(toCents(r.amount), r.currency)} · {everyLabel(r.frequency, r.interval_count ?? 1)} · next {r.next_run}
             </p>
           </div>
           <button onClick={() => toggle(r)} disabled={busy === r.id} className="text-xs text-brand">

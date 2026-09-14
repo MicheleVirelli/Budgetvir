@@ -55,6 +55,18 @@ export default async function ExpenseDetailPage({
         action={
           <div className="flex items-center gap-1">
             <Link
+              href={`/groups/${id}/recurring/new?from=${expenseId}`}
+              aria-label="Make recurring"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-brand active:bg-surface"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M17 2l4 4-4 4" />
+                <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+                <path d="M7 22l-4-4 4-4" />
+                <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+              </svg>
+            </Link>
+            <Link
               href={`/groups/${id}/expenses/${expenseId}/edit`}
               aria-label="Edit"
               className="flex h-9 w-9 items-center justify-center rounded-full text-brand active:bg-surface"
