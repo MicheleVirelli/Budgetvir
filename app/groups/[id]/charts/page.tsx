@@ -6,15 +6,19 @@ import { toCents } from "@/lib/split";
 import { formatMoney, profileName } from "@/lib/balances";
 import { getCategory } from "@/lib/categories";
 import BackHeader from "@/components/BackHeader";
+import ChartsDateRange from "./ChartsDateRange";
 
 export const dynamic = "force-dynamic";
 
 export default async function ChartsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string; to?: string }>;
 }) {
   const { id } = await params;
+  const { from, to } = await searchParams;
   const me = await getSessionProfile();
   if (!me) redirect("/login");
 
@@ -35,21 +39,27 @@ export default async function ChartsPage({
   const otherCurrencies = [...freq.keys()].filter((c) => c !== primary);
 
   const scoped = expenses.filter((e) => e.currency === primary);
-  const totalCents = scoped.reduce((s, e) => s + toCents(e.amount), 0);
 
-  const byCategory = aggregate(scoped, (e) => e.category);
-  const byPayer = aggregate(scoped, (e) => e.paid_by);
-  const byMonth = aggregate(scoped, (e) => e.expense_date.slice(0, 7));
+  // Optional date range (applies to the spending charts and KPIs).
+  const inRange = scoped.filter(
+    (e) => (!from || e.expense_date >= from) && (!to || e.expense_date <= to),
+  );
+
+  const totalCents = inRange.reduce((s, e) => s + toCents(e.amount), 0);
+
+  const byCategory = aggregate(inRange, (e) => e.category);
+  const byPayer = aggregate(inRange, (e) => e.paid_by);
+  const byMonth = aggregate(inRange, (e) => e.expense_date.slice(0, 7));
 
   // How much each member actually consumed (their share of the expenses).
   const byConsumer = new Map<string, number>();
-  for (const e of scoped)
+  for (const e of inRange)
     for (const s of e.splits)
       byConsumer.set(s.user_id, (byConsumer.get(s.user_id) ?? 0) + toCents(s.amount_owed));
 
-  const count = scoped.length;
+  const count = inRange.length;
   const avgCents = count ? Math.round(totalCents / count) : 0;
-  const biggestCents = scoped.reduce((m, e) => Math.max(m, toCents(e.amount)), 0);
+  const biggestCents = inRange.reduce((m, e) => Math.max(m, toCents(e.amount)), 0);
 
   const monthsSorted = [...byMonth.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(-6);
   const monthMax = Math.max(1, ...monthsSorted.map(([, v]) => v));
@@ -81,13 +91,28 @@ export default async function ChartsPage({
   events.sort((a, b) => a.t - b.t);
 
   const running = new Map<string, number>();
-  const series: { t: number; nets: Record<string, number> }[] = [];
+  const fullSeries: { t: number; nets: Record<string, number> }[] = [];
   if (events.length > 0) {
-    series.push({ t: events[0].t, nets: Object.fromEntries(members.map((m) => [m.id, 0])) });
+    fullSeries.push({ t: events[0].t, nets: Object.fromEntries(members.map((m) => [m.id, 0])) });
     for (const ev of events) {
       for (const [uid, d] of ev.deltas) running.set(uid, (running.get(uid) ?? 0) + d);
-      series.push({ t: ev.t, nets: Object.fromEntries(members.map((m) => [m.id, running.get(m.id) ?? 0])) });
+      fullSeries.push({ t: ev.t, nets: Object.fromEntries(members.map((m) => [m.id, running.get(m.id) ?? 0])) });
     }
+  }
+
+  // Window the balance line to the selected range, carrying the running net
+  // from just before the window so the line starts at the correct level.
+  const fromT = from ? new Date(from).getTime() : -Infinity;
+  const toT = to ? new Date(to).getTime() : Infinity;
+  let series = fullSeries;
+  if (from || to) {
+    const inWin = fullSeries.filter((p) => p.t >= fromT && p.t <= toT);
+    const before = [...fullSeries].reverse().find((p) => p.t < fromT);
+    series = [];
+    if (before && (inWin.length === 0 || inWin[0].t > fromT)) {
+      series.push({ t: Number.isFinite(fromT) ? fromT : inWin[0]?.t ?? before.t, nets: before.nets });
+    }
+    series.push(...inWin);
   }
 
   return (
@@ -100,6 +125,10 @@ export default async function ChartsPage({
           </a>
         }
       />
+
+      <div className="px-4 pt-3">
+        <ChartsDateRange from={from} to={to} />
+      </div>
 
       <div className="px-4 py-4">
         <div className="rounded-2xl bg-surface px-4 py-5 text-center">
@@ -121,7 +150,9 @@ export default async function ChartsPage({
       </div>
 
       {totalCents === 0 ? (
-        <p className="px-4 pt-10 text-center text-muted">No expenses to chart yet.</p>
+        <p className="px-4 pt-10 text-center text-muted">
+          {scoped.length > 0 ? "No expenses in this range." : "No expenses to chart yet."}
+        </p>
       ) : (
         <div className="flex flex-col gap-8 px-4">
           {series.length >= 2 && (
