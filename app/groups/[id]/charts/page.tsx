@@ -4,7 +4,7 @@ import { getGroupData, findProfile } from "@/lib/data";
 import { getSessionProfile } from "@/lib/supabase/auth";
 import { toCents } from "@/lib/split";
 import { formatMoney, profileName } from "@/lib/balances";
-import { getCategory } from "@/lib/categories";
+import { resolveCategory } from "@/lib/categories";
 import BackHeader from "@/components/BackHeader";
 import ChartsDateRange from "./ChartsDateRange";
 
@@ -25,7 +25,7 @@ export default async function ChartsPage({
   const data = await getGroupData(id);
   if (!data) notFound();
 
-  const { group, members, expenses, settlements } = data;
+  const { group, members, expenses, settlements, categories } = data;
 
   // Charts are per single currency (no FX). Pick the group default if used,
   // else the most frequent currency among expenses.
@@ -168,7 +168,7 @@ export default async function ChartsPage({
               {[...byCategory.entries()]
                 .sort((a, b) => b[1] - a[1])
                 .map(([key, cents]) => {
-                  const c = getCategory(key);
+                  const c = resolveCategory(key, categories);
                   return (
                     <Bar
                       key={key}

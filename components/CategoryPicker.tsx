@@ -1,17 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { CATEGORIES, getCategory } from "@/lib/categories";
+import { CATEGORIES, type Category } from "@/lib/categories";
 
 export default function CategoryPicker({
   value,
   onChange,
+  categories = CATEGORIES,
 }: {
   value: string;
   onChange: (key: string) => void;
+  categories?: Category[];
 }) {
   const [open, setOpen] = useState(false);
-  const current = getCategory(value);
+  const current = categories.find((c) => c.key === value) ?? categories[0];
 
   return (
     <div className="relative">
@@ -28,8 +30,8 @@ export default function CategoryPicker({
       </button>
 
       {open && (
-        <div className="absolute z-30 mt-1 grid w-full grid-cols-2 gap-1 rounded-2xl border border-border bg-surface-2 p-2 shadow-xl">
-          {CATEGORIES.map((c) => (
+        <div className="absolute z-30 mt-1 grid max-h-72 w-full grid-cols-2 gap-1 overflow-y-auto rounded-2xl border border-border bg-surface-2 p-2 shadow-xl">
+          {categories.map((c) => (
             <button
               key={c.key}
               type="button"

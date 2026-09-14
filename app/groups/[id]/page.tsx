@@ -53,7 +53,7 @@ export default async function GroupPage({
       </div>
 
       <main className="flex-1">
-        <GroupFeed groupId={group.id} expenses={expenses} members={members} meId={me.id} />
+        <GroupFeed groupId={group.id} expenses={expenses} members={members} meId={me.id} groupCategories={data.categories} />
       </main>
 
       <Link

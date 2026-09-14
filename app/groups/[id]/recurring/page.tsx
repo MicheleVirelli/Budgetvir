@@ -37,7 +37,7 @@ export default async function RecurringPage({
       <p className="px-4 pt-3 text-xs text-muted">
         Recurring expenses are added automatically when they come due (checked when you open the group).
       </p>
-      <RecurringList items={items} />
+      <RecurringList items={items} categories={data.categories} />
     </div>
   );
 }

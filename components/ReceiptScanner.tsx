@@ -3,7 +3,8 @@
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import type { Profile } from "@/lib/types";
+import type { Profile, GroupCategory } from "@/lib/types";
+import { buildCategoryList } from "@/lib/categories";
 import { toCents, fromCents } from "@/lib/split";
 import { formatMoney, profileName } from "@/lib/balances";
 import { parseReceiptText, computeItemizedOwed } from "@/lib/receipt";
@@ -29,15 +30,18 @@ export default function ReceiptScanner({
   members,
   meId,
   defaultCurrency,
+  groupCategories = [],
 }: {
   groupId: string;
   members: Profile[];
   meId: string;
   defaultCurrency: string;
+  groupCategories?: GroupCategory[];
 }) {
   const router = useRouter();
   const supabase = createClient();
   const fileRef = useRef<HTMLInputElement>(null);
+  const categoryList = buildCategoryList(groupCategories);
 
   const [step, setStep] = useState<"capture" | "ocr" | "review">("capture");
   const [file, setFile] = useState<File | null>(null);
@@ -247,7 +251,7 @@ export default function ReceiptScanner({
           </select>
         </div>
 
-        <CategoryPicker value={category} onChange={setCategory} />
+        <CategoryPicker value={category} onChange={setCategory} categories={categoryList} />
 
         {/* Items */}
         <div className="flex flex-col gap-3">

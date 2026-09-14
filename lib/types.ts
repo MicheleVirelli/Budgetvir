@@ -26,6 +26,15 @@ export interface Group {
   invite_token?: string;
 }
 
+export interface GroupCategory {
+  id: string;
+  group_id: string;
+  emoji: string;
+  label: string;
+  created_by: string;
+  created_at: string;
+}
+
 export interface GroupMember {
   group_id: string;
   user_id: string;

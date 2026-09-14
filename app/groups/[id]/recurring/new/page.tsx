@@ -29,6 +29,7 @@ export default async function NewRecurringPage({
       meId={me.id}
       defaultCurrency={data.group.default_currency ?? "EUR"}
       initial={initial}
+      groupCategories={data.categories}
     />
   );
 }

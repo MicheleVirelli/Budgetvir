@@ -4,10 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import type { ExpenseWithSplits, Profile } from "@/lib/types";
+import type { ExpenseWithSplits, Profile, GroupCategory } from "@/lib/types";
 import { toCents } from "@/lib/split";
 import { formatMoney, profileName } from "@/lib/balances";
-import { CATEGORIES, expenseIcon } from "@/lib/categories";
+import { buildCategoryList, expenseIcon } from "@/lib/categories";
 
 const PAGE = 20;
 
@@ -16,12 +16,15 @@ export default function GroupFeed({
   expenses,
   members,
   meId,
+  groupCategories = [],
 }: {
   groupId: string;
   expenses: ExpenseWithSplits[];
   members: Profile[];
   meId: string;
+  groupCategories?: GroupCategory[];
 }) {
+  const allCategories = buildCategoryList(groupCategories);
   const router = useRouter();
   const supabase = createClient();
   const [query, setQuery] = useState("");
@@ -54,8 +57,8 @@ export default function GroupFeed({
   const shown = filtered.slice(0, limit);
   const usedCategories = useMemo(() => {
     const set = new Set(expenses.map((e) => e.category));
-    return CATEGORIES.filter((c) => set.has(c.key));
-  }, [expenses]);
+    return allCategories.filter((c) => set.has(c.key));
+  }, [expenses, allCategories]);
 
   return (
     <div className="px-4">
@@ -94,7 +97,7 @@ export default function GroupFeed({
       ) : (
         <ul className="flex flex-col">
           {shown.map((exp) => (
-            <ExpenseRow key={exp.id} exp={exp} meId={meId} members={members} />
+            <ExpenseRow key={exp.id} exp={exp} meId={meId} members={members} categories={groupCategories} />
           ))}
         </ul>
       )}
@@ -136,10 +139,12 @@ function ExpenseRow({
   exp,
   meId,
   members,
+  categories,
 }: {
   exp: ExpenseWithSplits;
   meId: string;
   members: Profile[];
+  categories: GroupCategory[];
 }) {
   const payer = members.find((m) => m.id === exp.paid_by);
   const myShare = exp.splits.find((s) => s.user_id === meId);
@@ -166,7 +171,7 @@ function ExpenseRow({
           <span className="text-lg font-semibold leading-none">{date.getDate()}</span>
         </div>
         <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-surface text-xl">
-          {expenseIcon(exp.emoji, exp.category)}
+          {expenseIcon(exp.emoji, exp.category, categories)}
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate font-medium">{exp.title}</p>

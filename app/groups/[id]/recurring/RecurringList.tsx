@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import type { RecurringExpense } from "@/lib/types";
+import type { RecurringExpense, GroupCategory } from "@/lib/types";
 import { formatMoney } from "@/lib/balances";
 import { expenseIcon } from "@/lib/categories";
 import { toCents } from "@/lib/split";
@@ -20,7 +20,13 @@ function everyLabel(freq: string, count: number): string {
   return count <= 1 ? `Every ${one}` : `Every ${count} ${many}`;
 }
 
-export default function RecurringList({ items }: { items: RecurringExpense[] }) {
+export default function RecurringList({
+  items,
+  categories = [],
+}: {
+  items: RecurringExpense[];
+  categories?: GroupCategory[];
+}) {
   const router = useRouter();
   const supabase = createClient();
   const [list, setList] = useState(items);
@@ -61,7 +67,7 @@ export default function RecurringList({ items }: { items: RecurringExpense[] }) 
       {list.map((r) => (
         <li key={r.id} className={`flex items-center gap-3 rounded-2xl bg-surface px-4 py-3 ${r.active ? "" : "opacity-50"}`}>
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-surface-2 text-xl">
-            {expenseIcon(r.emoji, r.category)}
+            {expenseIcon(r.emoji, r.category, categories)}
           </div>
           <div className="min-w-0 flex-1">
             <p className="truncate font-medium">{r.title}</p>

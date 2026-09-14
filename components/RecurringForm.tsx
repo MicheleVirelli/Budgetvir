@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import type { Profile, SplitType, Frequency, ExpenseWithSplits } from "@/lib/types";
+import type { Profile, SplitType, Frequency, ExpenseWithSplits, GroupCategory } from "@/lib/types";
+import { buildCategoryList } from "@/lib/categories";
 import { computeSplit, validateSplit, toCents, fromCents } from "@/lib/split";
 import { profileName } from "@/lib/balances";
 import BackHeader from "@/components/BackHeader";
@@ -51,15 +52,18 @@ export default function RecurringForm({
   meId,
   defaultCurrency = "EUR",
   initial,
+  groupCategories = [],
 }: {
   groupId: string;
   members: Profile[];
   meId: string;
   defaultCurrency?: string;
   initial?: ExpenseWithSplits;
+  groupCategories?: GroupCategory[];
 }) {
   const router = useRouter();
   const supabase = createClient();
+  const categoryList = buildCategoryList(groupCategories);
 
   // When starting from an existing expense, default the first occurrence to the
   // 1st of next month so we don't immediately duplicate that expense.
@@ -165,7 +169,7 @@ export default function RecurringForm({
           />
         </div>
 
-        <CategoryPicker value={category} onChange={setCategory} />
+        <CategoryPicker value={category} onChange={setCategory} categories={categoryList} />
 
         <div className="flex items-center gap-2 rounded-xl bg-surface px-4 py-3">
           <span className="text-sm text-muted">Every</span>

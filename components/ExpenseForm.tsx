@@ -4,7 +4,8 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import type { Profile, SplitType, ExpenseWithSplits } from "@/lib/types";
+import type { Profile, SplitType, ExpenseWithSplits, GroupCategory } from "@/lib/types";
+import { buildCategoryList } from "@/lib/categories";
 import { computeSplit, validateSplit, toCents, fromCents } from "@/lib/split";
 import { profileName } from "@/lib/balances";
 import BackHeader from "@/components/BackHeader";
@@ -34,16 +35,19 @@ export default function ExpenseForm({
   meId,
   defaultCurrency = "EUR",
   initial,
+  groupCategories = [],
 }: {
   groupId: string;
   members: Profile[];
   meId: string;
   defaultCurrency?: string;
   initial?: ExpenseWithSplits;
+  groupCategories?: GroupCategory[];
 }) {
   const router = useRouter();
   const supabase = createClient();
   const editing = !!initial;
+  const categoryList = buildCategoryList(groupCategories);
 
   const [title, setTitle] = useState(initial?.title ?? "");
   const [emoji, setEmoji] = useState<string | null>(initial?.emoji ?? null);
@@ -178,7 +182,7 @@ export default function ExpenseForm({
           />
         </div>
 
-        <CategoryPicker value={category} onChange={setCategory} />
+        <CategoryPicker value={category} onChange={setCategory} categories={categoryList} />
 
         <label className="flex items-center justify-between rounded-xl bg-surface px-4 py-3">
           <span className="text-sm text-muted">Paid by</span>

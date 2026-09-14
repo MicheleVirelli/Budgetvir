@@ -23,6 +23,7 @@ export default async function ScanReceiptPage({
       members={data.members}
       meId={me.id}
       defaultCurrency={data.group.default_currency ?? "EUR"}
+      groupCategories={data.categories}
     />
   );
 }

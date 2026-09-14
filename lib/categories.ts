@@ -30,7 +30,38 @@ export function getCategory(key: string | null | undefined): Category {
   return (key && BY_KEY.get(key)) || CATEGORIES[0];
 }
 
+interface CustomCategory {
+  id: string;
+  emoji: string;
+  label: string;
+}
+
+function customToCategory(c: CustomCategory): Category {
+  return { key: c.id, label: c.label, emoji: c.emoji };
+}
+
+/** Built-in categories plus a group's custom ones (custom first). */
+export function buildCategoryList(custom: CustomCategory[] = []): Category[] {
+  return [...custom.map(customToCategory), ...CATEGORIES];
+}
+
+/** Resolve a category key against a group's custom categories, else built-ins. */
+export function resolveCategory(
+  key: string | null | undefined,
+  custom: CustomCategory[] = [],
+): Category {
+  if (key) {
+    const c = custom.find((x) => x.id === key);
+    if (c) return customToCategory(c);
+  }
+  return getCategory(key);
+}
+
 /** Icon shown for an expense: its own emoji if set, else the category emoji. */
-export function expenseIcon(emoji: string | null, category: string): string {
-  return emoji || getCategory(category).emoji;
+export function expenseIcon(
+  emoji: string | null,
+  category: string,
+  custom: CustomCategory[] = [],
+): string {
+  return emoji || resolveCategory(category, custom).emoji;
 }

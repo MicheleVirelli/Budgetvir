@@ -5,7 +5,7 @@ import { getSessionProfile } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
 import { toCents } from "@/lib/split";
 import { formatMoney, profileName } from "@/lib/balances";
-import { getCategory, expenseIcon } from "@/lib/categories";
+import { resolveCategory, expenseIcon } from "@/lib/categories";
 import type { ExpenseComment } from "@/lib/types";
 import Avatar from "@/components/Avatar";
 import BackHeader from "@/components/BackHeader";
@@ -46,7 +46,7 @@ export default async function ExpenseDetailPage({
   const comments = (commentRows ?? []) as unknown as ExpenseComment[];
 
   const payer = findProfile(data.members, expense.paid_by);
-  const category = getCategory(expense.category);
+  const category = resolveCategory(expense.category, data.categories);
 
   return (
     <div className="flex min-h-dvh flex-col pb-8">
@@ -82,7 +82,7 @@ export default async function ExpenseDetailPage({
 
       <div className="flex flex-col items-center gap-2 px-4 py-6 text-center">
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-surface text-3xl">
-          {expenseIcon(expense.emoji, expense.category)}
+          {expenseIcon(expense.emoji, expense.category, data.categories)}
         </div>
         <h1 className="text-xl font-semibold">{expense.title}</h1>
         <p className="text-3xl font-bold">{formatMoney(toCents(expense.amount), expense.currency)}</p>

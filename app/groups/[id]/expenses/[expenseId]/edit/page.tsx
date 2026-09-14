@@ -27,6 +27,7 @@ export default async function EditExpensePage({
       meId={me.id}
       defaultCurrency={data.group.default_currency ?? "EUR"}
       initial={expense}
+      groupCategories={data.categories}
     />
   );
 }

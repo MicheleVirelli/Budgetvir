@@ -5,6 +5,7 @@ import type {
   ExpenseWithSplits,
   Settlement,
   RecurringExpense,
+  GroupCategory,
 } from "./types";
 
 export interface GroupData {
@@ -12,6 +13,7 @@ export interface GroupData {
   members: Profile[];
   expenses: ExpenseWithSplits[];
   settlements: Settlement[];
+  categories: GroupCategory[];
 }
 
 /**
@@ -24,22 +26,32 @@ export interface GroupData {
 export async function getGroupData(groupId: string): Promise<GroupData | null> {
   const supabase = await createClient();
 
-  const [{ data: group }, { data: memberRows }, { data: expRows }, { data: settleRows }] =
-    await Promise.all([
-      supabase.from("groups").select("*").eq("id", groupId).single(),
-      supabase.from("group_members").select("profile:profiles(*)").eq("group_id", groupId),
-      supabase
-        .from("expenses")
-        .select("*, splits:expense_splits(*)")
-        .eq("group_id", groupId)
-        .order("expense_date", { ascending: false })
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("settlements")
-        .select("*")
-        .eq("group_id", groupId)
-        .order("paid_on", { ascending: false }),
-    ]);
+  const [
+    { data: group },
+    { data: memberRows },
+    { data: expRows },
+    { data: settleRows },
+    { data: catRows },
+  ] = await Promise.all([
+    supabase.from("groups").select("*").eq("id", groupId).single(),
+    supabase.from("group_members").select("profile:profiles(*)").eq("group_id", groupId),
+    supabase
+      .from("expenses")
+      .select("*, splits:expense_splits(*)")
+      .eq("group_id", groupId)
+      .order("expense_date", { ascending: false })
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("settlements")
+      .select("*")
+      .eq("group_id", groupId)
+      .order("paid_on", { ascending: false }),
+    supabase
+      .from("group_categories")
+      .select("*")
+      .eq("group_id", groupId)
+      .order("created_at", { ascending: true }),
+  ]);
 
   if (!group) return null;
 
@@ -52,6 +64,7 @@ export async function getGroupData(groupId: string): Promise<GroupData | null> {
     members,
     expenses: (expRows ?? []) as unknown as ExpenseWithSplits[],
     settlements: (settleRows ?? []) as unknown as Settlement[],
+    categories: (catRows ?? []) as unknown as GroupCategory[],
   };
 }
 
