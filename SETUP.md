@@ -68,6 +68,9 @@ Vercel project settings.
   participants, date, notes, optional receipt photo.
 - All split modes: **equally**, **by percentage**, **by exact amount**,
   **by shares**, **by adjustment** (live preview, exact-cent rounding).
+- **Scan a receipt** (📷 on the add-expense screen): on-device OCR
+  (Tesseract.js — no external service) reads the line items, then you assign
+  each item to one or more people and it saves as an itemised expense.
 - **Multi-currency** per expense; balances kept per currency (no FX).
 - **Settle up** (record payments) and **Simplify debts** (per-group toggle).
 - **Balances** — who owes whom, with one-tap settle.

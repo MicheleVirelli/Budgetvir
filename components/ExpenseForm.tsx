@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Profile, SplitType, ExpenseWithSplits } from "@/lib/types";
@@ -136,6 +137,15 @@ export default function ExpenseForm({
       />
 
       <div className="flex flex-1 flex-col gap-5 px-4 py-4">
+        {!editing && (
+          <Link
+            href={`/groups/${groupId}/expenses/scan`}
+            className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-surface py-3 text-sm font-medium text-brand"
+          >
+            <span>📷</span> Scan a receipt instead
+          </Link>
+        )}
+
         <div className="flex items-center gap-3">
           <EmojiPicker value={emoji} onChange={setEmoji} />
           <input
