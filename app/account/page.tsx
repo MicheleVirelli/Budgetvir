@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionProfile } from "@/lib/supabase/auth";
 import BottomNav from "@/components/BottomNav";
@@ -17,6 +18,16 @@ export default async function AccountPage() {
 
       <main className="flex-1 px-4 pb-24">
         <AccountForm profile={profile} />
+
+        <Link
+          href="/install"
+          className="mt-4 flex items-center justify-between rounded-xl bg-surface px-4 py-3"
+        >
+          <span className="flex items-center gap-2 font-medium">
+            <span>📲</span> Install app
+          </span>
+          <span className="text-muted">›</span>
+        </Link>
       </main>
 
       <BottomNav />

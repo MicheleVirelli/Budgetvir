@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 const items = [
   { href: "/", label: "Groups", icon: GroupsIcon },
+  { href: "/activity", label: "Activity", icon: ActivityIcon },
   { href: "/account", label: "Account", icon: AccountIcon },
 ];
 
@@ -41,6 +42,14 @@ function GroupsIcon() {
       <circle cx="17" cy="9" r="2.2" />
       <path d="M3.5 19a5.5 5.5 0 0 1 11 0" />
       <path d="M15 19a4.5 4.5 0 0 1 5.5-4.4" />
+    </svg>
+  );
+}
+
+function ActivityIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M3 12h4l2 6 4-14 2 8h6" />
     </svg>
   );
 }

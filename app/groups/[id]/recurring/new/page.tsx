@@ -1,11 +1,11 @@
 import { notFound, redirect } from "next/navigation";
 import { getGroupData } from "@/lib/data";
 import { getSessionProfile } from "@/lib/supabase/auth";
-import ExpenseForm from "@/components/ExpenseForm";
+import RecurringForm from "@/components/RecurringForm";
 
 export const dynamic = "force-dynamic";
 
-export default async function NewExpensePage({
+export default async function NewRecurringPage({
   params,
 }: {
   params: Promise<{ id: string }>;
@@ -18,7 +18,7 @@ export default async function NewExpensePage({
   if (!data) notFound();
 
   return (
-    <ExpenseForm
+    <RecurringForm
       groupId={id}
       members={data.members}
       meId={me.id}

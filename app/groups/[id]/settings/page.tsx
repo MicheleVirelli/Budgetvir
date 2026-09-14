@@ -1,11 +1,11 @@
 import { notFound, redirect } from "next/navigation";
 import { getGroupData } from "@/lib/data";
 import { getSessionProfile } from "@/lib/supabase/auth";
-import ExpenseForm from "@/components/ExpenseForm";
+import GroupSettings from "./GroupSettings";
 
 export const dynamic = "force-dynamic";
 
-export default async function NewExpensePage({
+export default async function GroupSettingsPage({
   params,
 }: {
   params: Promise<{ id: string }>;
@@ -17,12 +17,5 @@ export default async function NewExpensePage({
   const data = await getGroupData(id);
   if (!data) notFound();
 
-  return (
-    <ExpenseForm
-      groupId={id}
-      members={data.members}
-      meId={me.id}
-      defaultCurrency={data.group.default_currency ?? "EUR"}
-    />
-  );
+  return <GroupSettings group={data.group} meId={me.id} memberCount={data.members.length} />;
 }

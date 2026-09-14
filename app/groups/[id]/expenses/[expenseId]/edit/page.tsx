@@ -5,17 +5,20 @@ import ExpenseForm from "@/components/ExpenseForm";
 
 export const dynamic = "force-dynamic";
 
-export default async function NewExpensePage({
+export default async function EditExpensePage({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  params: Promise<{ id: string; expenseId: string }>;
 }) {
-  const { id } = await params;
+  const { id, expenseId } = await params;
   const me = await getSessionProfile();
   if (!me) redirect("/login");
 
   const data = await getGroupData(id);
   if (!data) notFound();
+
+  const expense = data.expenses.find((e) => e.id === expenseId);
+  if (!expense) notFound();
 
   return (
     <ExpenseForm
@@ -23,6 +26,7 @@ export default async function NewExpensePage({
       members={data.members}
       meId={me.id}
       defaultCurrency={data.group.default_currency ?? "EUR"}
+      initial={expense}
     />
   );
 }

@@ -1,13 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
 export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
+  const next = searchParams.get("next") || "/";
+  const safeNext = next.startsWith("/") ? next : "/";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -30,7 +33,7 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
           email,
           password,
           options: {
-            emailRedirectTo: `${window.location.origin}/auth/callback`,
+            emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(safeNext)}`,
             data: { display_name: displayName || email.split("@")[0] },
           },
         });
@@ -38,7 +41,7 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
 
         // If email confirmation is disabled, a session is returned immediately.
         if (data.session) {
-          router.push("/");
+          router.push(safeNext);
           router.refresh();
         } else {
           setInfo(
@@ -51,7 +54,7 @@ export default function AuthForm({ mode }: { mode: "login" | "signup" }) {
           password,
         });
         if (error) throw error;
-        router.push("/");
+        router.push(safeNext);
         router.refresh();
       }
     } catch (err) {

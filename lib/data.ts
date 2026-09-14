@@ -1,50 +1,71 @@
 import { createClient } from "./supabase/server";
-import type { Group, Profile, ExpenseWithSplits } from "./types";
+import type {
+  Group,
+  Profile,
+  ExpenseWithSplits,
+  Settlement,
+  RecurringExpense,
+} from "./types";
 
 export interface GroupData {
   group: Group;
   members: Profile[];
   expenses: ExpenseWithSplits[];
+  settlements: Settlement[];
 }
 
 /**
- * Load a group with its members and expenses (each with splits).
+ * Load a group with members, expenses (+splits) and settlements.
  * Returns null if the group doesn't exist or the user can't see it (RLS).
+ *
+ * One round-trip per relation, no per-row queries (no N+1). Payer/participant
+ * profiles are resolved from the members list on the client, not re-fetched.
  */
 export async function getGroupData(groupId: string): Promise<GroupData | null> {
   const supabase = await createClient();
 
-  const { data: group } = await supabase
-    .from("groups")
-    .select("*")
-    .eq("id", groupId)
-    .single();
-  if (!group) return null;
+  const [{ data: group }, { data: memberRows }, { data: expRows }, { data: settleRows }] =
+    await Promise.all([
+      supabase.from("groups").select("*").eq("id", groupId).single(),
+      supabase.from("group_members").select("profile:profiles(*)").eq("group_id", groupId),
+      supabase
+        .from("expenses")
+        .select("*, splits:expense_splits(*)")
+        .eq("group_id", groupId)
+        .order("expense_date", { ascending: false })
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("settlements")
+        .select("*")
+        .eq("group_id", groupId)
+        .order("paid_on", { ascending: false }),
+    ]);
 
-  const { data: memberRows } = await supabase
-    .from("group_members")
-    .select("profile:profiles(*)")
-    .eq("group_id", groupId);
+  if (!group) return null;
 
   const members = (memberRows ?? [])
     .map((r) => (r as unknown as { profile: Profile }).profile)
     .filter(Boolean);
 
-  const { data: expRows } = await supabase
-    .from("expenses")
-    .select("*, splits:expense_splits(*)")
-    .eq("group_id", groupId)
-    .order("expense_date", { ascending: false })
-    .order("created_at", { ascending: false });
-
-  const expenses = (expRows ?? []) as unknown as ExpenseWithSplits[];
-
-  return { group: group as Group, members, expenses };
+  return {
+    group: group as Group,
+    members,
+    expenses: (expRows ?? []) as unknown as ExpenseWithSplits[],
+    settlements: (settleRows ?? []) as unknown as Settlement[],
+  };
 }
 
-export function findProfile(
-  members: Profile[],
-  id: string,
-): Profile | undefined {
+export async function getRecurring(groupId: string): Promise<RecurringExpense[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("recurring_expenses")
+    .select("*")
+    .eq("group_id", groupId)
+    .order("next_run", { ascending: true });
+  return (data ?? []) as unknown as RecurringExpense[];
+}
+
+export function findProfile(members: Profile[], id: string | null | undefined): Profile | undefined {
+  if (!id) return undefined;
   return members.find((m) => m.id === id);
 }
