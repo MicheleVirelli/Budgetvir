@@ -5,6 +5,7 @@ import { profileName } from "@/lib/balances";
 import Avatar from "@/components/Avatar";
 import BackHeader from "@/components/BackHeader";
 import AddMemberForm from "./AddMemberForm";
+import PlaceholderMerge from "./PlaceholderMerge";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +36,7 @@ export default async function MembersPage({
 
       <ul className="flex flex-col px-4">
         {members.map((m) => (
-          <li key={m.id} className="flex items-center gap-3 border-b border-border/60 py-3">
+          <li key={m.id} className="flex flex-wrap items-center gap-x-3 border-b border-border/60 py-3">
             <Avatar src={m.avatar_url} name={m.display_name} email={m.email} size={44} />
             <div className="min-w-0 flex-1">
               <p className="truncate font-medium">
@@ -46,15 +47,16 @@ export default async function MembersPage({
                 {m.is_placeholder ? "No account" : m.email}
               </p>
             </div>
-            {m.is_placeholder && (
-              <span className="rounded-full bg-surface px-2 py-0.5 text-xs text-muted">
-                placeholder
-              </span>
-            )}
-            {m.id === group.created_by && (
-              <span className="rounded-full bg-surface px-2 py-0.5 text-xs text-muted">
-                admin
-              </span>
+            {m.is_placeholder ? (
+              <PlaceholderMerge
+                groupId={group.id}
+                placeholder={m}
+                realMembers={members.filter((x) => !x.is_placeholder)}
+              />
+            ) : (
+              m.id === group.created_by && (
+                <span className="rounded-full bg-surface px-2 py-0.5 text-xs text-muted">admin</span>
+              )
             )}
           </li>
         ))}
