@@ -35,6 +35,18 @@ export interface GroupCategory {
   created_at: string;
 }
 
+export const TOTAL_BUDGET_KEY = "__total__";
+
+export interface GroupBudget {
+  id: string;
+  group_id: string;
+  category: string; // '__total__' or a category key/id
+  amount: number;
+  currency: string;
+  created_by: string;
+  created_at: string;
+}
+
 export interface GroupMember {
   group_id: string;
   user_id: string;

@@ -6,6 +6,7 @@ import type {
   Settlement,
   RecurringExpense,
   GroupCategory,
+  GroupBudget,
 } from "./types";
 
 export interface GroupData {
@@ -14,6 +15,7 @@ export interface GroupData {
   expenses: ExpenseWithSplits[];
   settlements: Settlement[];
   categories: GroupCategory[];
+  budgets: GroupBudget[];
 }
 
 /**
@@ -32,6 +34,7 @@ export async function getGroupData(groupId: string): Promise<GroupData | null> {
     { data: expRows },
     { data: settleRows },
     { data: catRows },
+    { data: budgetRows },
   ] = await Promise.all([
     supabase.from("groups").select("*").eq("id", groupId).single(),
     supabase.from("group_members").select("profile:profiles(*)").eq("group_id", groupId),
@@ -51,6 +54,7 @@ export async function getGroupData(groupId: string): Promise<GroupData | null> {
       .select("*")
       .eq("group_id", groupId)
       .order("created_at", { ascending: true }),
+    supabase.from("group_budgets").select("*").eq("group_id", groupId),
   ]);
 
   if (!group) return null;
@@ -65,6 +69,7 @@ export async function getGroupData(groupId: string): Promise<GroupData | null> {
     expenses: (expRows ?? []) as unknown as ExpenseWithSplits[],
     settlements: (settleRows ?? []) as unknown as Settlement[],
     categories: (catRows ?? []) as unknown as GroupCategory[],
+    budgets: (budgetRows ?? []) as unknown as GroupBudget[],
   };
 }
 

@@ -5,6 +5,7 @@ import { getSessionProfile } from "@/lib/supabase/auth";
 import { toCents } from "@/lib/split";
 import { formatMoney, profileName } from "@/lib/balances";
 import { resolveCategory } from "@/lib/categories";
+import { TOTAL_BUDGET_KEY, type GroupCategory } from "@/lib/types";
 import BackHeader from "@/components/BackHeader";
 import ChartsDateRange from "./ChartsDateRange";
 
@@ -25,7 +26,7 @@ export default async function ChartsPage({
   const data = await getGroupData(id);
   if (!data) notFound();
 
-  const { group, members, expenses, settlements, categories } = data;
+  const { group, members, expenses, settlements, categories, budgets } = data;
 
   // Charts are per single currency (no FX). Pick the group default if used,
   // else the most frequent currency among expenses.
@@ -62,7 +63,25 @@ export default async function ChartsPage({
   const biggestCents = inRange.reduce((m, e) => Math.max(m, toCents(e.amount)), 0);
 
   const monthsSorted = [...byMonth.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(-6);
-  const monthMax = Math.max(1, ...monthsSorted.map(([, v]) => v));
+
+  // Budgets (current calendar month, independent of the range filter).
+  const budgetMap = new Map(budgets.map((b) => [b.category, toCents(b.amount)]));
+  const totalBudget = budgetMap.get(TOTAL_BUDGET_KEY) ?? 0;
+  const hasBudget = budgets.length > 0;
+
+  const nowMonth = new Date().toISOString().slice(0, 7);
+  const monthExpenses = scoped.filter((e) => e.expense_date.slice(0, 7) === nowMonth);
+  const monthSpent = monthExpenses.reduce((s, e) => s + toCents(e.amount), 0);
+  const monthByCat = new Map<string, number>();
+  for (const e of monthExpenses) monthByCat.set(e.category, (monthByCat.get(e.category) ?? 0) + toCents(e.amount));
+  const catBudgets = [...budgetMap.entries()]
+    .filter(([k, v]) => k !== TOTAL_BUDGET_KEY && v > 0)
+    .map(([k, v]) => ({ key: k, budget: v, spent: monthByCat.get(k) ?? 0 }))
+    .sort((a, b) => b.spent / b.budget - a.spent / a.budget);
+  const monthLabelLong = new Date(nowMonth + "-01").toLocaleString("en", { month: "long", year: "numeric" });
+
+  // "Last months" chart also carries the budget line (max includes the budget).
+  const monthMax = Math.max(1, totalBudget, ...monthsSorted.map(([, v]) => v));
 
   // Paid vs consumed per member.
   const memberStats = members
@@ -149,6 +168,19 @@ export default async function ChartsPage({
         )}
       </div>
 
+      <div className="px-4 pb-2">
+        <BudgetThisMonth
+          groupId={id}
+          monthLabel={monthLabelLong}
+          totalBudget={totalBudget}
+          monthSpent={monthSpent}
+          catBudgets={catBudgets}
+          categories={categories}
+          hasBudget={hasBudget}
+          currency={primary}
+        />
+      </div>
+
       {totalCents === 0 ? (
         <p className="px-4 pt-10 text-center text-muted">
           {scoped.length > 0 ? "No expenses in this range." : "No expenses to chart yet."}
@@ -208,23 +240,16 @@ export default async function ChartsPage({
           </section>
 
           <section>
-            <h2 className="mb-3 text-sm font-semibold text-muted">Last months</h2>
-            <div className="flex items-end justify-between gap-2">
-              {monthsSorted.map(([month, cents]) => (
-                <div key={month} className="flex flex-1 flex-col items-center gap-1">
-                  <span className="text-[10px] text-muted">
-                    {formatMoney(cents, primary).replace(/[.,]00$/, "")}
-                  </span>
-                  <div className="flex h-28 w-full items-end">
-                    <div
-                      className="w-full rounded-t-md bg-brand"
-                      style={{ height: `${Math.max(3, Math.round((cents / monthMax) * 100))}%` }}
-                    />
-                  </div>
-                  <span className="text-[10px] text-muted">{monthLabel(month)}</span>
-                </div>
-              ))}
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-muted">Last months</h2>
+              {totalBudget > 0 && (
+                <span className="flex items-center gap-3 text-[11px] text-muted">
+                  <span className="flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-brand" />entro</span>
+                  <span className="flex items-center gap-1"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-negative" />oltre</span>
+                </span>
+              )}
             </div>
+            <MonthsBudgetChart months={monthsSorted} budget={totalBudget} max={monthMax} currency={primary} />
           </section>
         </div>
       )}
@@ -340,6 +365,176 @@ function Stat({ label, value }: { label: string; value: string }) {
       <p className="truncate text-sm font-semibold">{value}</p>
       <p className="text-[11px] text-muted">{label}</p>
     </div>
+  );
+}
+
+function BudgetThisMonth({
+  groupId,
+  monthLabel,
+  totalBudget,
+  monthSpent,
+  catBudgets,
+  categories,
+  hasBudget,
+  currency,
+}: {
+  groupId: string;
+  monthLabel: string;
+  totalBudget: number;
+  monthSpent: number;
+  catBudgets: { key: string; budget: number; spent: number }[];
+  categories: GroupCategory[];
+  hasBudget: boolean;
+  currency: string;
+}) {
+  if (!hasBudget) {
+    return (
+      <Link href={`/groups/${groupId}/budget`} className="flex items-center justify-between rounded-2xl bg-surface px-4 py-3.5">
+        <span className="flex items-center gap-2 text-sm">
+          <span>🎯</span> Set a monthly budget
+        </span>
+        <span className="text-muted">›</span>
+      </Link>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl bg-surface p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-semibold">Budget · {monthLabel}</h2>
+        <Link href={`/groups/${groupId}/budget`} className="text-xs text-brand">
+          Edit
+        </Link>
+      </div>
+
+      {totalBudget > 0 && (
+        <div className="mb-3">
+          <BudgetBar label={<span className="font-medium">Overall</span>} spent={monthSpent} budget={totalBudget} currency={currency} />
+        </div>
+      )}
+
+      {catBudgets.length > 0 && (
+        <div className="flex flex-col gap-2.5">
+          {catBudgets.map((c) => {
+            const cat = resolveCategory(c.key, categories);
+            return (
+              <BudgetBar
+                key={c.key}
+                label={<span>{cat.emoji} {cat.label}</span>}
+                spent={c.spent}
+                budget={c.budget}
+                currency={currency}
+              />
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BudgetBar({
+  label,
+  spent,
+  budget,
+  currency,
+}: {
+  label: React.ReactNode;
+  spent: number;
+  budget: number;
+  currency: string;
+}) {
+  const pct = budget > 0 ? Math.min(100, Math.round((spent / budget) * 100)) : 0;
+  const over = spent > budget;
+  const diff = Math.abs(budget - spent);
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between text-sm">
+        <span className="truncate">{label}</span>
+        <span className="ml-2 shrink-0 text-xs [font-variant-numeric:tabular-nums]">
+          <span className="font-medium">{formatMoney(spent, currency)}</span>
+          <span className="text-muted"> / {formatMoney(budget, currency)}</span>
+        </span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-surface-2">
+        <div className={`h-full rounded-full ${over ? "bg-negative" : "bg-brand"}`} style={{ width: `${Math.max(2, pct)}%` }} />
+      </div>
+      <p className={`mt-0.5 text-[11px] ${over ? "text-negative" : "text-muted"}`}>
+        {over ? `Over by ${formatMoney(diff, currency)}` : `${formatMoney(diff, currency)} left`}
+      </p>
+    </div>
+  );
+}
+
+function MonthsBudgetChart({
+  months,
+  budget,
+  max,
+  currency,
+}: {
+  months: [string, number][];
+  budget: number;
+  max: number;
+  currency: string;
+}) {
+  const W = 340;
+  const H = 176;
+  const padL = 10;
+  const padR = 10;
+  const padTop = 26;
+  const padBottom = 22;
+  const x0 = padL;
+  const x1 = W - padR;
+  const y0 = padTop;
+  const y1 = H - padBottom;
+  const plotW = x1 - x0;
+  const plotH = y1 - y0;
+  const sy = (v: number) => y1 - (v / max) * plotH;
+  const n = Math.max(1, months.length);
+  const slot = plotW / n;
+  const bw = Math.min(34, slot * 0.56);
+  const budgetY = sy(budget);
+  const money0 = (c: number) => formatMoney(c, currency).replace(/[.,]00$/, "");
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="auto" preserveAspectRatio="xMidYMid meet">
+      <line x1={x0} y1={y1} x2={x1} y2={y1} stroke="var(--color-border)" strokeWidth="1" />
+
+      {months.map(([ym, cents], i) => {
+        const cx = x0 + slot * (i + 0.5);
+        const bx = cx - bw / 2;
+        const topY = sy(cents);
+        const over = budget > 0 && cents > budget;
+        return (
+          <g key={ym}>
+            {over ? (
+              <>
+                <rect x={bx} y={budgetY} width={bw} height={y1 - budgetY} rx="4" fill="var(--color-brand)" />
+                <rect x={bx} y={topY} width={bw} height={Math.max(2, budgetY - 2 - topY)} rx="4" fill="var(--color-negative)" />
+              </>
+            ) : (
+              <rect x={bx} y={topY} width={bw} height={y1 - topY} rx="4" fill="var(--color-brand)" />
+            )}
+            <text x={cx} y={topY - 6} textAnchor="middle" fontSize="10" fill={over ? "var(--color-negative)" : "var(--color-text)"} fontWeight={over ? 700 : 500}>
+              {money0(cents)}
+            </text>
+            <text x={cx} y={y1 + 14} textAnchor="middle" fontSize="11" fill="var(--color-muted)">
+              {monthLabel(ym)}
+            </text>
+          </g>
+        );
+      })}
+
+      {budget > 0 && (
+        <>
+          <line x1={x0} y1={budgetY} x2={x1 - 46} y2={budgetY} stroke="#d7d8dc" strokeWidth="2" strokeDasharray="5 4" opacity="0.85" />
+          <rect x={x1 - 44} y={budgetY - 8} width="44" height="16" rx="8" fill="var(--color-bg)" stroke="var(--color-border)" />
+          <text x={x1 - 22} y={budgetY + 3.5} textAnchor="middle" fontSize="9.5" fill="#d7d8dc" fontWeight="600">
+            {money0(budget)}
+          </text>
+        </>
+      )}
+    </svg>
   );
 }
 

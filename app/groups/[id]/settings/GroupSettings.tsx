@@ -161,6 +161,11 @@ export default function GroupSettings({
           <span className="text-muted">›</span>
         </Link>
 
+        <Link href={`/groups/${group.id}/budget`} className="mt-2 flex items-center justify-between rounded-xl bg-surface px-4 py-3">
+          <span className="font-medium">Monthly budget</span>
+          <span className="text-muted">›</span>
+        </Link>
+
         <p className="mb-2 mt-6 text-sm font-medium text-muted">Data</p>
         <div className="flex flex-col overflow-hidden rounded-xl bg-surface">
           <Link href={`/groups/${group.id}/import`} className="flex items-center justify-between border-b border-border/50 px-4 py-3">
