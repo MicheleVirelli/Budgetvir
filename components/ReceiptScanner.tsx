@@ -123,6 +123,7 @@ export default function ReceiptScanner({
   const [progress, setProgress] = useState(0);
   const [ocrNote, setOcrNote] = useState<string | null>(null);
   const [rawText, setRawText] = useState("");
+  const [copiedText, setCopiedText] = useState(false);
 
   const [items, setItems] = useState<Item[]>([]);
   const [title, setTitle] = useState("Receipt");
@@ -442,6 +443,21 @@ export default function ReceiptScanner({
         {rawText.trim() && (
           <details className="rounded-2xl bg-surface p-3 text-xs text-muted">
             <summary className="cursor-pointer select-none font-medium">Scanned text</summary>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(rawText.trim());
+                  setCopiedText(true);
+                  setTimeout(() => setCopiedText(false), 1500);
+                } catch {
+                  setCopiedText(false);
+                }
+              }}
+              className="mt-2 rounded-lg bg-surface-2 px-3 py-1.5 text-xs font-medium text-text"
+            >
+              {copiedText ? "Copied!" : "📋 Copy text"}
+            </button>
             <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-text/80">
               {rawText.trim()}
             </pre>
