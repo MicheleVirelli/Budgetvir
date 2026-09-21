@@ -10,11 +10,9 @@ export interface ParsedReceipt {
   totalCents: number | null;
 }
 
-// Money amount at (or near) the end of a line, allowing a trailing VAT-class
-// marker as printed on Italian receipts: 12,50 / 12.50 / 1.234,56 / 12,50 € /
-// 2,69 B / 0,85 *D  (the "* / A-Z" tail is the IVA class, not part of the price).
-const PRICE_RE = /(-?\d{1,3}(?:[.\s]\d{3})*[.,]\d{2})\s*(?:€|eur)?\s*\*?\s*[A-Za-z]{0,2}\s*$/i;
-// All money amounts anywhere on a line (used to tell unit-price from line-total).
+// Any money amount on a line: 12,50 / 12.50 / 1.234,56. The line price is taken
+// as the rightmost such match (see lastAmount), which tolerates trailing OCR
+// noise and a VAT-class letter printed after the price ("2,69 B", "0,85 *D").
 const AMOUNT_G = /-?\d{1,3}(?:[.\s]\d{3})*[.,]\d{2}/g;
 // "2 x", "2x", "2 ×" quantity markers.
 const QTY_UNIT_RE = /(\d{1,3})\s*[x×]\s*(\d{1,3}(?:[.,]\d{2}))/i;
@@ -66,13 +64,27 @@ function hasProductWord(line: string): boolean {
 }
 
 /**
- * A "detail" line carries only a quantity/measure and price but no real product
- * name — e.g. "2 X 3,00", "n.3 t 2,40", "1,200 kg x 2,00". Such lines describe
- * the item on the line above (or its printed line-total), so on their own they
- * must not become items.
+ * The rightmost money amount on a line, tolerating trailing noise after it — a
+ * photographed receipt often has background bleed on the right ("35,00 i i A"),
+ * so the price is no longer anchored to the end of the line. Returns the raw
+ * amount string and where it starts (so the label is everything before it).
  */
-function isDetailLine(line: string): boolean {
-  return PRICE_RE.test(line) && !hasProductWord(line);
+function lastAmount(line: string): { raw: string; index: number } | null {
+  const re = new RegExp(AMOUNT_G.source, "g");
+  let m: RegExpExecArray | null;
+  let last: { raw: string; index: number } | null = null;
+  while ((m = re.exec(line))) last = { raw: m[0], index: m.index };
+  return last;
+}
+
+/**
+ * A quantity breakdown line — "2 X 3,00", "3 x 2,50" — with no product name of
+ * its own. On these receipts the real line-total is printed on the adjacent
+ * item line, so counting the breakdown too would double-count. Always skipped.
+ */
+function isQtyDetailLine(line: string): boolean {
+  if (hasProductWord(line)) return false;
+  return QTY_UNIT_RE.test(line) || /(^|\s)\d{1,3}\s*[x×]\s/i.test(line);
 }
 
 // A trailing VAT-rate column printed before the price on some receipts
@@ -87,8 +99,8 @@ const TRAILING_VAT_PCT_RE = /\s*\b\d{1,3}\s*%\s*$/;
  */
 /**
  * Normalise common OCR artefacts before line parsing:
- * a space injected inside a decimal amount ("13, 06", "2 ,69") so PRICE_RE and
- * AMOUNT_G still recognise it. Deliberately conservative: only a space directly
+ * a space injected inside a decimal amount ("13, 06", "2 ,69") so AMOUNT_G
+ * still recognises it. Deliberately conservative: only a space directly
  * around the decimal separator, right before its two decimals, is collapsed.
  */
 function normalizeOcr(text: string): string {
@@ -114,9 +126,9 @@ export function parseReceiptText(text: string): ParsedReceipt {
   for (const line of lines) {
     // Grand total.
     if (TOTAL_RE.test(line) && !SUBTOTAL_RE.test(line)) {
-      const m = line.match(PRICE_RE);
-      if (m) {
-        const c = toCents(Math.abs(parseAmount(m[1])));
+      const a = lastAmount(line);
+      if (a) {
+        const c = toCents(Math.abs(parseAmount(a.raw)));
         if (totalCents === null || c > totalCents) totalCents = c;
       }
       pending = "";
@@ -129,10 +141,10 @@ export function parseReceiptText(text: string): ParsedReceipt {
 
     // Discount → negative item.
     if (DISCOUNT_RE.test(line)) {
-      const m = line.match(PRICE_RE);
-      if (m) {
-        const c = toCents(Math.abs(parseAmount(m[1])));
-        if (c > 0) push(cleanLabel(line.slice(0, m.index)) || "Sconto", -c);
+      const a = lastAmount(line);
+      if (a) {
+        const c = toCents(Math.abs(parseAmount(a.raw)));
+        if (c > 0) push(cleanLabel(line.slice(0, a.index)) || "Sconto", -c);
       }
       pending = "";
       continue;
@@ -143,24 +155,23 @@ export function parseReceiptText(text: string): ParsedReceipt {
       continue;
     }
 
-    // Quantity/measure detail line ("2 X 3,00", "n.3 t 2,40") with no product
-    // name of its own → skip, unless a description is pending (then it supplies
-    // the price for that description below).
-    if (!pending && isDetailLine(line)) {
+    // Quantity breakdown ("2 X 3,00") whose real total is on the item line —
+    // always skip so it isn't counted twice.
+    if (isQtyDetailLine(line)) {
       continue;
     }
 
-    const m = line.match(PRICE_RE);
-    if (!m) {
-      // Possibly the name of an item whose price is on the next line. A line that
-      // is only a unit token ("EA", "n.3 t") is not a name — ignore it, so the
-      // detail line that follows doesn't attach to it as a bogus item.
+    const a = lastAmount(line);
+    if (!a) {
+      // No price → possibly the name of an item whose price is on the next line.
+      // Require a real product word so background noise / unit tokens ("EA") do
+      // not become a bogus pending name that the next line attaches to.
       if (hasProductWord(line)) pending = line;
       continue;
     }
 
-    let cents = toCents(parseAmount(m[1]));
-    let label = cleanLabel(line.slice(0, m.index).replace(TRAILING_VAT_PCT_RE, ""));
+    let cents = toCents(parseAmount(a.raw));
+    let label = cleanLabel(line.slice(0, a.index).replace(TRAILING_VAT_PCT_RE, ""));
     let qty = 1;
 
     const qu = line.match(QTY_UNIT_RE);
@@ -190,7 +201,9 @@ export function parseReceiptText(text: string): ParsedReceipt {
     if (!label && pending) label = cleanLabel(pending);
     pending = "";
 
-    if (!/[a-zA-ZÀ-ÿ]/.test(label) || label.length < 2) continue;
+    // Require a real product word: rejects noise-only "items" produced by
+    // background bleed (dates, opening hours, register footer text).
+    if (!hasProductWord(label)) continue;
 
     push(qty > 1 ? `${qty}× ${label}` : label, cents);
   }
