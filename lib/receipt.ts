@@ -49,22 +49,35 @@ function cleanLabel(s: string): string {
 }
 
 /**
- * True for a "detail" line that carries only a quantity/measure and price but no
- * real product name — e.g. "2 X 3,00", "n.3 t 2,40", "1,200 kg x 2,00". Such
- * lines describe the item on the line above (or its printed line-total), so on
- * their own they must not become items. A line with any real word (≥2 letters
- * that isn't a unit token) is treated as an item, not a detail line.
+ * True if a line contains a real product word: a run of ≥2 letters left over
+ * after removing amounts, quantities, VAT percentages, punctuation and unit
+ * tokens (n, kg, x, ea, …). "EA", "2 X 3,00", "n.3 t 2,40" have none; "FIORE
+ * RECISO", "CORONA ALLORO" do.
  */
-function isDetailLine(line: string): boolean {
-  if (!PRICE_RE.test(line)) return false;
+function hasProductWord(line: string): boolean {
   const stripped = line
     .replace(/-?\d{1,3}(?:[.\s]\d{3})*[.,]\d{2}/g, " ") // money amounts
     .replace(/\d+/g, " ") // leftover digits (quantities)
-    .replace(/[x×*.,:;·@()/€-]/g, " ")
+    .replace(/%/g, " ")
+    .replace(/[x×*.,:;·@()/€+-]/g, " ")
     .replace(UNIT_WORD_RE, " ")
     .trim();
-  return !/[a-zA-ZÀ-ÿ]{2,}/.test(stripped);
+  return /[a-zA-ZÀ-ÿ]{2,}/.test(stripped);
 }
+
+/**
+ * A "detail" line carries only a quantity/measure and price but no real product
+ * name — e.g. "2 X 3,00", "n.3 t 2,40", "1,200 kg x 2,00". Such lines describe
+ * the item on the line above (or its printed line-total), so on their own they
+ * must not become items.
+ */
+function isDetailLine(line: string): boolean {
+  return PRICE_RE.test(line) && !hasProductWord(line);
+}
+
+// A trailing VAT-rate column printed before the price on some receipts
+// ("CORONA ALLORO LAUR 10%") — stripped from item labels.
+const TRAILING_VAT_PCT_RE = /\s*\b\d{1,3}\s*%\s*$/;
 
 /**
  * Best-effort parse of raw receipt OCR text into line items and a total.
@@ -139,13 +152,15 @@ export function parseReceiptText(text: string): ParsedReceipt {
 
     const m = line.match(PRICE_RE);
     if (!m) {
-      // Possibly the name of an item whose price is on the next line.
-      if (/[a-zA-ZÀ-ÿ]/.test(line) && line.length >= 2 && !/^\d/.test(line)) pending = line;
+      // Possibly the name of an item whose price is on the next line. A line that
+      // is only a unit token ("EA", "n.3 t") is not a name — ignore it, so the
+      // detail line that follows doesn't attach to it as a bogus item.
+      if (hasProductWord(line)) pending = line;
       continue;
     }
 
     let cents = toCents(parseAmount(m[1]));
-    let label = cleanLabel(line.slice(0, m.index));
+    let label = cleanLabel(line.slice(0, m.index).replace(TRAILING_VAT_PCT_RE, ""));
     let qty = 1;
 
     const qu = line.match(QTY_UNIT_RE);

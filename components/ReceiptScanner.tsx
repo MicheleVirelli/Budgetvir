@@ -25,6 +25,79 @@ function parseNum(v: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/**
+ * Prepare a photo for OCR. Two things matter for phone snaps of receipts:
+ *  - Orientation: Tesseract's own image decoder ignores EXIF orientation, so a
+ *    portrait photo is read sideways and comes out as vertical gibberish. We
+ *    decode through the browser (which honours EXIF) and re-draw upright.
+ *  - Legibility: grayscale + a full-range contrast stretch makes faded thermal
+ *    print stand out from the paper (and from a busy background); we also
+ *    normalise the size to a resolution Tesseract reads well.
+ * Returns a Blob for recognition; falls back to the original file on any error.
+ */
+async function preprocessReceipt(file: File): Promise<Blob> {
+  try {
+    let source: CanvasImageSource;
+    let sw: number;
+    let sh: number;
+    try {
+      const bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
+      source = bmp;
+      sw = bmp.width;
+      sh = bmp.height;
+    } catch {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const im = new Image();
+        im.onload = () => resolve(im);
+        im.onerror = reject;
+        im.src = URL.createObjectURL(file);
+      });
+      source = img;
+      sw = img.naturalWidth;
+      sh = img.naturalHeight;
+    }
+    if (!sw || !sh) return file;
+
+    const target = 1600; // good working resolution; upscale small snaps up to 2×
+    const scale = Math.min(2, target / sw);
+    const w = Math.max(1, Math.round(sw * scale));
+    const h = Math.max(1, Math.round(sh * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return file;
+    ctx.drawImage(source, 0, 0, w, h);
+
+    try {
+      const imgData = ctx.getImageData(0, 0, w, h);
+      const d = imgData.data;
+      let min = 255;
+      let max = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        const g = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) | 0;
+        d[i] = d[i + 1] = d[i + 2] = g;
+        if (g < min) min = g;
+        if (g > max) max = g;
+      }
+      const range = max - min || 1;
+      for (let i = 0; i < d.length; i += 4) {
+        const v = ((d[i] - min) * 255) / range;
+        d[i] = d[i + 1] = d[i + 2] = v;
+      }
+      ctx.putImageData(imgData, 0, 0);
+    } catch {
+      // getImageData may throw on a tainted canvas — keep the drawn image as-is.
+    }
+
+    return await new Promise<Blob>((resolve) =>
+      canvas.toBlob((b) => resolve(b || file), "image/png"),
+    );
+  } catch {
+    return file;
+  }
+}
+
 export default function ReceiptScanner({
   groupId,
   members,
@@ -78,11 +151,12 @@ export default function ReceiptScanner({
           if (m.status === "recognizing text") setProgress(m.progress);
         },
       });
-      // PSM 4 = a single column of text of variable sizes: matches the layout of
-      // most receipts (description on the left, price on the right) better than
-      // the default page-segmentation, which fragments the columns.
-      await worker.setParameters({ tessedit_pageseg_mode: "4" as never });
-      const { data } = await worker.recognize(f);
+      // PSM 6 = assume a single uniform block of text: the recommended mode for a
+      // receipt (one column of lines) — the default page-segmentation fragments
+      // the description/price columns.
+      await worker.setParameters({ tessedit_pageseg_mode: "6" as never });
+      const processed = await preprocessReceipt(f);
+      const { data } = await worker.recognize(processed);
       await worker.terminate();
 
       const text = data.text || "";
