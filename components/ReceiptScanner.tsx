@@ -163,22 +163,32 @@ export default function ReceiptScanner({
       const text = data.text || "";
       setRawText(text);
       const parsed = parseReceiptText(text);
-      const newItems: Item[] = parsed.items.map((it, i) => ({
+      let newItems: Item[] = parsed.items.map((it, i) => ({
         id: `${Date.now()}-${i}`,
         description: it.description,
         price: (it.priceCents / 100).toFixed(2),
         memberIds: [...allIds],
       }));
 
-      if (newItems.length === 0 && parsed.totalCents && parsed.totalCents > 0) {
-        // Couldn't split into line items, but we found a total — seed it as a
-        // single item so the amount is captured and can be assigned/split.
-        newItems.push({
-          id: `${Date.now()}-total`,
-          description: "Receipt total",
-          price: (parsed.totalCents / 100).toFixed(2),
-          memberIds: [...allIds],
-        });
+      const itemsSum = parsed.items.reduce((s, it) => s + it.priceCents, 0);
+      const total = parsed.totalCents;
+      const totalItem = (): Item => ({
+        id: `${Date.now()}-total`,
+        description: "Receipt total",
+        price: ((total as number) / 100).toFixed(2),
+        memberIds: [...allIds],
+      });
+
+      if (newItems.length > 0 && total != null && Math.abs(itemsSum - total) > 2) {
+        // The parsed items don't add up to the printed total (poor OCR on the
+        // item rows). Trust the total instead of a wrong itemised sum: seed a
+        // single line at the printed total, which the user can still split.
+        newItems = [totalItem()];
+        setOcrNote(`The scanned items didn't add up to the printed total (${formatMoney(total, currency)}) — using the total. Tap “+ Add” to enter items by hand.`);
+      } else if (newItems.length === 0 && total != null && total > 0) {
+        // Couldn't split into line items, but we found a total — seed it so the
+        // amount is captured and can be assigned/split.
+        newItems.push(totalItem());
         setOcrNote("Couldn't read individual items, but caught the total — check it and split, or tap “+ Add” for line items.");
       } else if (newItems.length === 0) {
         setOcrNote("Couldn't read this receipt automatically — add items below (or check the scanned text).");

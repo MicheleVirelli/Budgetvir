@@ -25,7 +25,7 @@ const DISCOUNT_RE = /\b(sconto|scont|discount|promo(?:zione)?|riduzione|buono|vo
 // bogus item (the scanner sums items to get the expense amount).
 // NOTE: bare "tax" is intentionally NOT here — Italian VAT lines say "IVA"/"VAT",
 // while "City Tax" / "Tourist Tax" are real chargeable items (e.g. hotel bills).
-const NOISE_RE = /\b(iva|vat|resto|change|contante|cash|carta|card|pos|bancomat|cambio|tavolo|coperto? n|scontrino|documento|cassa|operatore|grazie|thank|arrivederci|p\.?\s?iva|cod\.?\s?fisc|pagament\w*|elettronic\w*|electronic\w*|credit\w*|debit\w*|visa|mastercard|maestro|contactless|banconot\w*|assegn\w*)\b/i;
+const NOISE_RE = /\b(iva|vat|resto|change|contante|cash|carta|card|pos|bancomat|cambio|tavolo|coperto? n|scontrino|documento|cassa|operatore|grazie|thank|arrivederci|p\.?\s?iva|cod\.?\s?fisc|pagament\w*|elettronic\w*|electronic\w*|credit\w*|debit\w*|visa|mastercard|maestro|contactless|banconot\w*|assegn\w*|articol\w*|di\s*cui|firma|server|ecr)\b/i;
 // Unit/measure tokens that appear on quantity/detail lines (e.g. "n.3 t 2,40",
 // "1,200 kg x 2,00") — used to tell a detail line from a real item.
 const UNIT_WORD_RE = /\b(n|nr|no|t|un|pz|pzi|conf|kg|hg|gr|g|ml|cl|dl|lt|l|mt|m|cm|per|ea|eur|iva|x)\b/gi;
