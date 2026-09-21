@@ -10,8 +10,10 @@ export interface ParsedReceipt {
   totalCents: number | null;
 }
 
-// Money amount at (or near) the end of a line: 12,50 / 12.50 / 1.234,56 / 12,50 €
-const PRICE_RE = /(-?\d{1,3}(?:[.\s]\d{3})*[.,]\d{2})\s*(?:€|eur)?\s*$/i;
+// Money amount at (or near) the end of a line, allowing a trailing VAT-class
+// marker as printed on Italian receipts: 12,50 / 12.50 / 1.234,56 / 12,50 € /
+// 2,69 B / 0,85 *D  (the "* / A-Z" tail is the IVA class, not part of the price).
+const PRICE_RE = /(-?\d{1,3}(?:[.\s]\d{3})*[.,]\d{2})\s*(?:€|eur)?\s*\*?\s*[A-Za-z]{0,2}\s*$/i;
 // All money amounts anywhere on a line (used to tell unit-price from line-total).
 const AMOUNT_G = /-?\d{1,3}(?:[.\s]\d{3})*[.,]\d{2}/g;
 // "2 x", "2x", "2 ×" quantity markers.
@@ -20,7 +22,15 @@ const QTY_UNIT_RE = /(\d{1,3})\s*[x×]\s*(\d{1,3}(?:[.,]\d{2}))/i;
 const TOTAL_RE = /\b(totale?|total|importo|tot(?:\.|\b)|amount due|balance due|to pay|zu zahlen)\b/i;
 const SUBTOTAL_RE = /\b(sub[- ]?totale?|subtotal|imponibile)\b/i;
 const DISCOUNT_RE = /\b(sconto|scont|discount|promo(?:zione)?|riduzione|buono|voucher|coupon|off)\b/i;
-const NOISE_RE = /\b(iva|vat|tax|resto|change|contante|cash|carta|card|pos|bancomat|cambio|tavolo|coperto? n|scontrino|documento|cassa|operatore|grazie|thank|arrivederci|p\.?\s?iva|cod\.?\s?fisc)\b/i;
+// Non-item lines: taxes, receipt/register metadata, and payment lines. Payment
+// terms matter because "Pagamento elettronico 3,54" would otherwise be read as a
+// bogus item (the scanner sums items to get the expense amount).
+// NOTE: bare "tax" is intentionally NOT here — Italian VAT lines say "IVA"/"VAT",
+// while "City Tax" / "Tourist Tax" are real chargeable items (e.g. hotel bills).
+const NOISE_RE = /\b(iva|vat|resto|change|contante|cash|carta|card|pos|bancomat|cambio|tavolo|coperto? n|scontrino|documento|cassa|operatore|grazie|thank|arrivederci|p\.?\s?iva|cod\.?\s?fisc|pagament\w*|elettronic\w*|electronic\w*|credit\w*|debit\w*|visa|mastercard|maestro|contactless|banconot\w*|assegn\w*)\b/i;
+// Unit/measure tokens that appear on quantity/detail lines (e.g. "n.3 t 2,40",
+// "1,200 kg x 2,00") — used to tell a detail line from a real item.
+const UNIT_WORD_RE = /\b(n|nr|no|t|un|pz|pzi|conf|kg|hg|gr|g|ml|cl|dl|lt|l|mt|m|cm|per|ea|eur|iva|x)\b/gi;
 
 function parseAmount(raw: string): number {
   let s = raw.trim().replace(/[€\s]/g, "");
@@ -36,6 +46,24 @@ function parseAmount(raw: string): number {
 
 function cleanLabel(s: string): string {
   return s.replace(/[.\-–:]+$/, "").replace(/^[.\-–:]+/, "").trim();
+}
+
+/**
+ * True for a "detail" line that carries only a quantity/measure and price but no
+ * real product name — e.g. "2 X 3,00", "n.3 t 2,40", "1,200 kg x 2,00". Such
+ * lines describe the item on the line above (or its printed line-total), so on
+ * their own they must not become items. A line with any real word (≥2 letters
+ * that isn't a unit token) is treated as an item, not a detail line.
+ */
+function isDetailLine(line: string): boolean {
+  if (!PRICE_RE.test(line)) return false;
+  const stripped = line
+    .replace(/-?\d{1,3}(?:[.\s]\d{3})*[.,]\d{2}/g, " ") // money amounts
+    .replace(/\d+/g, " ") // leftover digits (quantities)
+    .replace(/[x×*.,:;·@()/€-]/g, " ")
+    .replace(UNIT_WORD_RE, " ")
+    .trim();
+  return !/[a-zA-ZÀ-ÿ]{2,}/.test(stripped);
 }
 
 /**
@@ -89,6 +117,13 @@ export function parseReceiptText(text: string): ParsedReceipt {
 
     if (NOISE_RE.test(line)) {
       pending = "";
+      continue;
+    }
+
+    // Quantity/measure detail line ("2 X 3,00", "n.3 t 2,40") with no product
+    // name of its own → skip, unless a description is pending (then it supplies
+    // the price for that description below).
+    if (!pending && isDetailLine(line)) {
       continue;
     }
 
