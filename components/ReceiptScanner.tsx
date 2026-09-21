@@ -40,7 +40,8 @@ export default function ReceiptScanner({
 }) {
   const router = useRouter();
   const supabase = createClient();
-  const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
   const categoryList = buildCategoryList(groupCategories);
 
   const [step, setStep] = useState<"capture" | "ocr" | "review">("capture");
@@ -48,6 +49,7 @@ export default function ReceiptScanner({
   const [preview, setPreview] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [ocrNote, setOcrNote] = useState<string | null>(null);
+  const [rawText, setRawText] = useState("");
 
   const [items, setItems] = useState<Item[]>([]);
   const [title, setTitle] = useState("Receipt");
@@ -76,26 +78,44 @@ export default function ReceiptScanner({
           if (m.status === "recognizing text") setProgress(m.progress);
         },
       });
+      // PSM 4 = a single column of text of variable sizes: matches the layout of
+      // most receipts (description on the left, price on the right) better than
+      // the default page-segmentation, which fragments the columns.
+      await worker.setParameters({ tessedit_pageseg_mode: "4" as never });
       const { data } = await worker.recognize(f);
       await worker.terminate();
 
-      const parsed = parseReceiptText(data.text || "");
+      const text = data.text || "";
+      setRawText(text);
+      const parsed = parseReceiptText(text);
       const newItems: Item[] = parsed.items.map((it, i) => ({
         id: `${Date.now()}-${i}`,
         description: it.description,
         price: (it.priceCents / 100).toFixed(2),
         memberIds: [...allIds],
       }));
-      setItems(newItems);
-      if (newItems.length === 0) {
-        setOcrNote("Couldn't read line items automatically — add them below.");
+
+      if (newItems.length === 0 && parsed.totalCents && parsed.totalCents > 0) {
+        // Couldn't split into line items, but we found a total — seed it as a
+        // single item so the amount is captured and can be assigned/split.
+        newItems.push({
+          id: `${Date.now()}-total`,
+          description: "Receipt total",
+          price: (parsed.totalCents / 100).toFixed(2),
+          memberIds: [...allIds],
+        });
+        setOcrNote("Couldn't read individual items, but caught the total — check it and split, or tap “+ Add” for line items.");
+      } else if (newItems.length === 0) {
+        setOcrNote("Couldn't read this receipt automatically — add items below (or check the scanned text).");
       }
+      setItems(newItems);
     } catch {
       setOcrNote("OCR failed on this image — you can still enter items manually.");
       setItems([]);
     } finally {
       setStep("review");
-      if (fileRef.current) fileRef.current.value = "";
+      if (cameraRef.current) cameraRef.current.value = "";
+      if (galleryRef.current) galleryRef.current.value = "";
     }
   }
 
@@ -192,12 +212,21 @@ export default function ReceiptScanner({
         <div className="flex flex-1 flex-col items-center justify-center gap-5 px-6 text-center">
           <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-surface text-4xl">🧾</div>
           <p className="text-sm text-muted">
-            Take a photo of the receipt. We&apos;ll read the items so you can assign them to people.
+            Take a photo of the receipt or pick one from your gallery. We&apos;ll read the items so you can assign them to people.
           </p>
-          <button onClick={() => fileRef.current?.click()} className="rounded-full bg-brand px-8 py-3 font-semibold text-black">
-            Take / choose photo
-          </button>
-          <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={onFile} className="hidden" />
+          <div className="flex w-full max-w-xs flex-col gap-2">
+            <button onClick={() => cameraRef.current?.click()} className="rounded-full bg-brand px-8 py-3 font-semibold text-black">
+              📷 Take photo
+            </button>
+            <button onClick={() => galleryRef.current?.click()} className="rounded-full border border-border bg-surface px-8 py-3 font-semibold">
+              🖼️ Choose from gallery
+            </button>
+          </div>
+          {/* Camera capture (rear camera) vs. plain file picker for the gallery.
+              Two inputs because the `capture` attribute, when present, makes some
+              mobile browsers skip the gallery and open the camera directly. */}
+          <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={onFile} className="hidden" />
+          <input ref={galleryRef} type="file" accept="image/*" onChange={onFile} className="hidden" />
         </div>
       </div>
     );
@@ -233,7 +262,17 @@ export default function ReceiptScanner({
       />
 
       <div className="flex flex-col gap-4 px-4 py-4">
-        {ocrNote && <p className="rounded-xl bg-surface px-3 py-2 text-xs text-muted">{ocrNote}</p>}
+        {ocrNote && (
+          <div className="flex flex-col gap-2 rounded-xl bg-surface px-3 py-2">
+            <p className="text-xs text-muted">{ocrNote}</p>
+            <button
+              onClick={() => { setStep("capture"); setItems([]); setOcrNote(null); setRawText(""); }}
+              className="self-start text-xs font-medium text-brand"
+            >
+              ↻ Scan a different photo
+            </button>
+          </div>
+        )}
 
         <input
           value={title}
@@ -325,6 +364,15 @@ export default function ReceiptScanner({
         </div>
 
         {error && <p className="text-sm text-danger">{error}</p>}
+
+        {rawText.trim() && (
+          <details className="rounded-2xl bg-surface p-3 text-xs text-muted">
+            <summary className="cursor-pointer select-none font-medium">Scanned text</summary>
+            <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-text/80">
+              {rawText.trim()}
+            </pre>
+          </details>
+        )}
       </div>
     </div>
   );

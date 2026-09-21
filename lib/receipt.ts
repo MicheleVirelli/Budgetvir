@@ -72,8 +72,18 @@ function isDetailLine(line: string): boolean {
  * negative-price item). Conservative on purpose — the UI lets the user fix
  * everything.
  */
+/**
+ * Normalise common OCR artefacts before line parsing:
+ * a space injected inside a decimal amount ("13, 06", "2 ,69") so PRICE_RE and
+ * AMOUNT_G still recognise it. Deliberately conservative: only a space directly
+ * around the decimal separator, right before its two decimals, is collapsed.
+ */
+function normalizeOcr(text: string): string {
+  return text.replace(/(\d)[ \t]*([.,])[ \t]*(\d{2})(?!\d)/g, "$1$2$3");
+}
+
 export function parseReceiptText(text: string): ParsedReceipt {
-  const lines = text
+  const lines = normalizeOcr(text)
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter(Boolean);
