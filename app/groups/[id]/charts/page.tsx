@@ -64,6 +64,11 @@ export default async function ChartsPage({
 
   const monthsSorted = [...byMonth.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(-6);
 
+  // Category slices (shared by the donut and the legend bars) and the monthly
+  // spending trend (last 12 months) for the two new charts.
+  const catEntries = [...byCategory.entries()].sort((a, b) => b[1] - a[1]);
+  const trendMonths = [...byMonth.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(-12);
+
   // Budgets (current calendar month, independent of the range filter).
   const budgetMap = new Map(budgets.map((b) => [b.category, toCents(b.amount)]));
   const totalBudget = budgetMap.get(TOTAL_BUDGET_KEY) ?? 0;
@@ -196,21 +201,28 @@ export default async function ChartsPage({
 
           <section>
             <h2 className="mb-3 text-sm font-semibold text-muted">By category</h2>
-            <div className="flex flex-col gap-2.5">
-              {[...byCategory.entries()]
-                .sort((a, b) => b[1] - a[1])
-                .map(([key, cents]) => {
-                  const c = resolveCategory(key, categories);
-                  return (
-                    <Bar
-                      key={key}
-                      label={`${c.emoji} ${c.label}`}
-                      cents={cents}
-                      total={totalCents}
-                      currency={primary}
-                    />
-                  );
-                })}
+            <CategoryDonut
+              slices={catEntries.map(([key, cents], i) => {
+                const c = resolveCategory(key, categories);
+                return { label: `${c.emoji} ${c.label}`, cents, color: catColor(i) };
+              })}
+              total={totalCents}
+              currency={primary}
+            />
+            <div className="mt-4 flex flex-col gap-2.5">
+              {catEntries.map(([key, cents], i) => {
+                const c = resolveCategory(key, categories);
+                return (
+                  <Bar
+                    key={key}
+                    label={`${c.emoji} ${c.label}`}
+                    cents={cents}
+                    total={totalCents}
+                    currency={primary}
+                    color={catColor(i)}
+                  />
+                );
+              })}
             </div>
           </section>
 
@@ -237,6 +249,21 @@ export default async function ChartsPage({
                 </div>
               ))}
             </div>
+          </section>
+
+          <section>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-muted">Spending trend</h2>
+              <span className="flex items-center gap-1 text-[11px] text-muted">
+                <span className="inline-block h-0 w-4 border-t-2 border-dashed" style={{ borderColor: "#d7d8dc" }} />
+                average
+              </span>
+            </div>
+            {trendMonths.length >= 2 ? (
+              <SpendTrend months={trendMonths} currency={primary} />
+            ) : (
+              <p className="text-sm text-muted">Not enough months yet to show a trend.</p>
+            )}
           </section>
 
           <section>
@@ -298,6 +325,17 @@ function PcBar({
 }
 
 const LINE_COLORS = ["#4fb89a", "#6ea8fe", "#e8955a", "#c58af9", "#e05a5a", "#f2c14e"];
+
+// Categorical palette for the donut + its legend bars (brand teal first, then a
+// spread of distinct hues that read on the dark surface).
+const CATEGORY_COLORS = [
+  "#4fb89a", "#6ea8fe", "#e8955a", "#c58af9", "#e05a5a",
+  "#f2c14e", "#5bc4a8", "#8b93ff", "#ef7fb4", "#9bd35a",
+];
+
+function catColor(i: number): string {
+  return CATEGORY_COLORS[i % CATEGORY_COLORS.length];
+}
 
 function BalanceOverTime({
   members,
@@ -548,11 +586,13 @@ function Bar({
   cents,
   total,
   currency,
+  color,
 }: {
   label: string;
   cents: number;
   total: number;
   currency: string;
+  color?: string;
 }) {
   const pct = total > 0 ? Math.round((cents / total) * 100) : 0;
   return (
@@ -564,8 +604,127 @@ function Bar({
         </span>
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-surface-2">
-        <div className="h-full rounded-full bg-brand" style={{ width: `${Math.max(2, pct)}%` }} />
+        <div
+          className="h-full rounded-full"
+          style={{ width: `${Math.max(2, pct)}%`, background: color ?? "var(--color-brand)" }}
+        />
       </div>
     </div>
+  );
+}
+
+// Donut of total spending by category. Slices are drawn as dash segments of one
+// ring, starting at 12 o'clock; the centre shows the total.
+function CategoryDonut({
+  slices,
+  total,
+  currency,
+}: {
+  slices: { label: string; cents: number; color: string }[];
+  total: number;
+  currency: string;
+}) {
+  const R = 42;
+  const C = 2 * Math.PI * R;
+  const centerMoney = formatMoney(total, currency).replace(/[.,]00$/, "");
+  let acc = 0;
+
+  return (
+    <div className="flex items-center justify-center py-1">
+      <svg viewBox="0 0 120 120" width="180" height="180" role="img" aria-label="Spending by category">
+        <g transform="rotate(-90 60 60)">
+          <circle cx="60" cy="60" r={R} fill="none" stroke="var(--color-surface-2)" strokeWidth="16" />
+          {slices.map((s, i) => {
+            const frac = total > 0 ? s.cents / total : 0;
+            const dash = frac * C;
+            const offset = -acc * C;
+            acc += frac;
+            if (dash <= 0) return null;
+            return (
+              <circle
+                key={i}
+                cx="60"
+                cy="60"
+                r={R}
+                fill="none"
+                stroke={s.color}
+                strokeWidth="16"
+                strokeDasharray={`${dash} ${C - dash}`}
+                strokeDashoffset={offset}
+              />
+            );
+          })}
+        </g>
+        <text x="60" y="57" textAnchor="middle" fontSize="15" fontWeight="700" fill="var(--color-text)">
+          {centerMoney}
+        </text>
+        <text x="60" y="71" textAnchor="middle" fontSize="8.5" fill="var(--color-muted)">
+          total
+        </text>
+      </svg>
+    </div>
+  );
+}
+
+// Monthly spending as a line + area, with a dashed line at the average month.
+function SpendTrend({ months, currency }: { months: [string, number][]; currency: string }) {
+  const W = 340;
+  const H = 168;
+  const padL = 10;
+  const padR = 10;
+  const padTop = 24;
+  const padBottom = 22;
+  const x0 = padL;
+  const x1 = W - padR;
+  const y0 = padTop;
+  const y1 = H - padBottom;
+  const plotW = x1 - x0;
+  const plotH = y1 - y0;
+
+  const vals = months.map(([, c]) => c);
+  const avg = Math.round(vals.reduce((s, v) => s + v, 0) / vals.length);
+  const max = Math.max(1, ...vals, avg);
+  const n = months.length;
+  const px = (i: number) => (n === 1 ? (x0 + x1) / 2 : x0 + (i / (n - 1)) * plotW);
+  const py = (v: number) => y1 - (v / max) * plotH;
+  const avgY = py(avg);
+  const money0 = (c: number) => formatMoney(c, currency).replace(/[.,]00$/, "");
+
+  const pts = months.map(([, c], i) => `${px(i)},${py(c)}`);
+  const areaPath = `M ${x0},${y1} L ${pts.join(" L ")} L ${x1},${y1} Z`;
+  // Show at most ~6 month labels so they don't collide.
+  const labelStep = Math.ceil(n / 6);
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="auto" preserveAspectRatio="xMidYMid meet">
+      <line x1={x0} y1={y1} x2={x1} y2={y1} stroke="var(--color-border)" strokeWidth="1" />
+
+      <path d={areaPath} fill="var(--color-brand)" opacity="0.12" />
+      <polyline
+        points={pts.join(" ")}
+        fill="none"
+        stroke="var(--color-brand)"
+        strokeWidth="2.5"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+      {months.map(([ym, c], i) => (
+        <g key={ym}>
+          <circle cx={px(i)} cy={py(c)} r="2.6" fill="var(--color-brand)" />
+          {i % labelStep === 0 && (
+            <text x={px(i)} y={y1 + 14} textAnchor="middle" fontSize="10.5" fill="var(--color-muted)">
+              {monthLabel(ym)}
+            </text>
+          )}
+        </g>
+      ))}
+
+      {/* Average line + pill */}
+      <line x1={x0} y1={avgY} x2={x1 - 46} y2={avgY} stroke="#d7d8dc" strokeWidth="2" strokeDasharray="5 4" opacity="0.85" />
+      <rect x={x1 - 44} y={avgY - 8} width="44" height="16" rx="8" fill="var(--color-bg)" stroke="var(--color-border)" />
+      <text x={x1 - 22} y={avgY + 3.5} textAnchor="middle" fontSize="9.5" fill="#d7d8dc" fontWeight="600">
+        {money0(avg)}
+      </text>
+    </svg>
   );
 }
