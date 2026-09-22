@@ -16,6 +16,12 @@ A personalized Splitwise built with Next.js + Supabase, deployed on Vercel.
    (lets a group's creator read back their new group and add themselves as the
    first member — fixes group creation).
 
+6. Run the remaining migrations in order:
+   `0005_placeholders.sql`, `0006_recurring_interval.sql`, `0007_group_categories.sql`,
+   `0008_merge_placeholder.sql`, `0009_budgets.sql`.
+7. Paste and run [`supabase/migrations/0010_bank.sql`](supabase/migrations/0010_bank.sql)
+   (bank/card connection tables + RLS — needed only for the "Bank & cards" feature).
+
 > The migrations are idempotent — safe to re-run.
 
 ### Optional: demo data
@@ -46,6 +52,47 @@ Already set on Vercel. For local development, `.env.local` contains:
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
 ```
+
+## 3b. Bank / card connection (optional — Enable Banking)
+
+Connecting a real bank card uses **Enable Banking**, a Finland-based, FIN-FSA-regulated
+open-banking provider (a licensed PSD2 **AISP**). Its free **Restricted Production** tier
+lets you link **your own** accounts across Italian banks. By PSD2 law, automatic bank access
+must go through a licensed intermediary — Enable Banking is that intermediary and the data
+transits their infrastructure. Your bank login is entered only on your bank's own page;
+Budgetvir never sees it, and the app's private key stays server-side only.
+
+> Free-tier limit: Restricted Production links only the app owner's own accounts. Other
+> users connecting their own cards would need the paid Production tier + a licence.
+
+Setup:
+
+1. Create an account at **enablebanking.com** → Control Panel → **register an application**.
+   - Choose environment **Restricted Production** (real data, your own accounts).
+   - The browser generates and **downloads a private key** (a `.pem`) — keep it safe.
+   - Note the **Application ID**.
+2. In the application settings, add the **redirect URL**:
+   `https://<your-vercel-domain>/api/bank/callback`.
+3. Add these **server-only** env vars in Vercel (Project → Settings → Environment
+   Variables — do **not** prefix with `NEXT_PUBLIC_`):
+
+   ```
+   ENABLEBANKING_APP_ID=<your application id>
+   ENABLEBANKING_PRIVATE_KEY=<contents of the downloaded .pem, incl. BEGIN/END lines>
+   ENABLEBANKING_REDIRECT_URL=https://<your-vercel-domain>/api/bank/callback
+   APP_BASE_URL=https://<your-vercel-domain>
+   ```
+
+   For `ENABLEBANKING_PRIVATE_KEY`, paste the PEM as-is (multi-line) or with `\n` escapes —
+   both are handled. For local dev, put the same in `.env.local` and use
+   `http://localhost:3000/api/bank/callback`.
+4. Run migration `0010_bank.sql` (step 1.7 above).
+5. Test against a **sandbox** ASPSP first, then your real bank. Transactions are stored in
+   your Supabase, locked per-user by RLS. Syncing is on demand ("Sync now"), with a 6-hour
+   cooldown to respect bank rate limits.
+
+Prefer zero third parties? Skip this and use manual CSV import instead (group settings →
+Import) — nothing leaves your control that way.
 
 ## 4. Run locally
 

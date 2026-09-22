@@ -29,6 +29,14 @@ function initialRows(members: Profile[], initial?: ExpenseWithSplits): SplitRowS
   });
 }
 
+export interface ExpensePrefill {
+  title?: string;
+  amount?: string;
+  category?: string;
+  currency?: string;
+  expenseDate?: string;
+}
+
 export default function ExpenseForm({
   groupId,
   members,
@@ -36,6 +44,8 @@ export default function ExpenseForm({
   defaultCurrency = "EUR",
   initial,
   groupCategories = [],
+  prefill,
+  sourceTxId,
 }: {
   groupId: string;
   members: Profile[];
@@ -43,22 +53,26 @@ export default function ExpenseForm({
   defaultCurrency?: string;
   initial?: ExpenseWithSplits;
   groupCategories?: GroupCategory[];
+  prefill?: ExpensePrefill;
+  sourceTxId?: string;
 }) {
   const router = useRouter();
   const supabase = createClient();
   const editing = !!initial;
   const categoryList = buildCategoryList(groupCategories);
 
-  const [title, setTitle] = useState(initial?.title ?? "");
+  const [title, setTitle] = useState(initial?.title ?? prefill?.title ?? "");
   const [emoji, setEmoji] = useState<string | null>(initial?.emoji ?? null);
-  const [category, setCategory] = useState(initial?.category ?? "general");
-  const [amount, setAmount] = useState(initial ? String(initial.amount) : "");
-  const [currency, setCurrency] = useState(initial?.currency ?? defaultCurrency);
+  const [category, setCategory] = useState(initial?.category ?? prefill?.category ?? "general");
+  const [amount, setAmount] = useState(initial ? String(initial.amount) : prefill?.amount ?? "");
+  const [currency, setCurrency] = useState(initial?.currency ?? prefill?.currency ?? defaultCurrency);
   const [paidBy, setPaidBy] = useState(initial?.paid_by ?? meId);
   const [splitType, setSplitType] = useState<SplitType>(initial?.split_type ?? "equal");
   const [receiptUrl, setReceiptUrl] = useState<string | null>(initial?.receipt_url ?? null);
   const [notes, setNotes] = useState(initial?.notes ?? "");
-  const [expenseDate, setExpenseDate] = useState(initial?.expense_date ?? new Date().toISOString().slice(0, 10));
+  const [expenseDate, setExpenseDate] = useState(
+    initial?.expense_date ?? prefill?.expenseDate ?? new Date().toISOString().slice(0, 10),
+  );
   const [rows, setRows] = useState<SplitRowState[]>(() => initialRows(members, initial));
 
   const [loading, setLoading] = useState(false);
@@ -116,6 +130,15 @@ export default function ExpenseForm({
       }));
       const { error: sErr } = await supabase.from("expense_splits").insert(splitRows);
       if (sErr) throw sErr;
+
+      // If this expense came from a bank transaction, tag that transaction with
+      // where it landed (the original stays in the channel). RLS scopes it to me.
+      if (!editing && sourceTxId) {
+        await supabase
+          .from("bank_transactions")
+          .update({ added_group_id: groupId, added_expense_id: expenseId })
+          .eq("id", sourceTxId);
+      }
 
       router.replace(editing ? `/groups/${groupId}/expenses/${expenseId}` : `/groups/${groupId}`);
       router.refresh();

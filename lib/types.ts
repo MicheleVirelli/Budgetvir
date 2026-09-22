@@ -143,3 +143,44 @@ export interface ExpenseWithSplits extends Expense {
   splits: ExpenseSplit[];
   payer?: Profile;
 }
+
+export interface BankConnection {
+  id: string;
+  user_id: string;
+  aspsp_name: string;
+  aspsp_country: string;
+  eb_session_id: string | null;
+  status: "pending" | "linked" | "error" | "expired";
+  valid_until: string | null;
+  created_at: string;
+}
+
+export interface BankAccount {
+  id: string;
+  user_id: string;
+  connection_id: string;
+  eb_account_uid: string;
+  name: string | null;
+  iban_masked: string | null;
+  currency: string;
+  last_synced_at: string | null;
+  created_at: string;
+}
+
+export interface BankTransaction {
+  id: string;
+  user_id: string;
+  account_id: string;
+  eb_tx_id: string;
+  booking_date: string | null;
+  amount: number; // always positive; see direction
+  currency: string;
+  direction: "debit" | "credit";
+  description: string | null;
+  counterparty: string | null;
+  status: "booked" | "pending";
+  added_group_id: string | null;
+  added_expense_id: string | null;
+  dismissed: boolean;
+  created_at: string;
+}

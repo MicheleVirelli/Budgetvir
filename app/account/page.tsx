@@ -20,8 +20,18 @@ export default async function AccountPage() {
         <AccountForm profile={profile} />
 
         <Link
-          href="/install"
+          href="/account/bank"
           className="mt-4 flex items-center justify-between rounded-xl bg-surface px-4 py-3"
+        >
+          <span className="flex items-center gap-2 font-medium">
+            <span>🏦</span> Bank &amp; cards
+          </span>
+          <span className="text-muted">›</span>
+        </Link>
+
+        <Link
+          href="/install"
+          className="mt-2 flex items-center justify-between rounded-xl bg-surface px-4 py-3"
         >
           <span className="flex items-center gap-2 font-medium">
             <span>📲</span> Install app

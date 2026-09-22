@@ -57,6 +57,29 @@ export function resolveCategory(
   return getCategory(key);
 }
 
+// Keyword → category, for guessing a category from a bank transaction's text.
+// Lowercased substring match; first hit wins. Best-effort — the user can change
+// it in the prefilled form.
+const CATEGORY_HINTS: [RegExp, string][] = [
+  [/esselunga|coop|conad|lidl|eurospin|carrefour|interspar|despar|pam|penny|aldi|md |supermerc|aliment|market/, "groceries"],
+  [/ristorant|pizzer|trattor|osteria|mcdonald|burger|sushi|bar\b|caffè|caffe|bistro|tavola calda/, "dining"],
+  [/enoteca|birr|pub\b|wine|cocktail/, "drinks"],
+  [/benzin|carburant|eni\b|q8|tamoil|ip\b|esso|agip|distributor|autostrad|telepass|parcheggi|park|taxi|uber|trenital|italo|atac|gtt|amt|metro|bus\b/, "transport"],
+  [/booking|airbnb|hotel|ryanair|easyjet|ita airways|alitalia|volotea|wizz|trivago|expedia|flixbus/, "travel"],
+  [/enel|eni gas|hera|a2a|acea|iren|sorgenia|illumia|tim\b|vodafone|windtre|fastweb|iliad|bolletta/, "utilities"],
+  [/netflix|spotify|disney|prime video|dazn|now tv|cinema|teatro|steam|playstation|xbox|nintendo/, "entertainment"],
+  [/amazon|zalando|zara|h&m|decathlon|ikea|mediaworld|unieuro|apple\b|shop|store/, "shopping"],
+  [/farmac|parafarm|medic|dottor|ospedal|clinic|dental|ottica/, "health"],
+  [/palestr|gym|fitness|piscina|sport/, "sports"],
+];
+
+/** Best-effort category key guessed from a transaction description. */
+export function guessCategory(text: string | null | undefined): string {
+  const s = (text ?? "").toLowerCase();
+  for (const [re, key] of CATEGORY_HINTS) if (re.test(s)) return key;
+  return "general";
+}
+
 /** Icon shown for an expense: its own emoji if set, else the category emoji. */
 export function expenseIcon(
   emoji: string | null,
