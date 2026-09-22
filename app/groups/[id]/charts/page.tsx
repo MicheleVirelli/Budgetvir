@@ -204,7 +204,7 @@ export default async function ChartsPage({
             <CategoryDonut
               slices={catEntries.map(([key, cents], i) => {
                 const c = resolveCategory(key, categories);
-                return { label: `${c.emoji} ${c.label}`, cents, color: catColor(i) };
+                return { emoji: c.emoji, label: c.label, cents, color: catColor(i) };
               })}
               total={totalCents}
               currency={primary}
@@ -613,27 +613,32 @@ function Bar({
   );
 }
 
-// Donut of total spending by category. Slices are drawn as dash segments of one
-// ring, starting at 12 o'clock; the centre shows the total.
+// Donut of total spending by category. Slices are dash segments of one ring,
+// starting at 12 o'clock; each slice ≥ 5% is labelled with its emoji + % just
+// outside the ring, and the centre shows the total.
 function CategoryDonut({
   slices,
   total,
   currency,
 }: {
-  slices: { label: string; cents: number; color: string }[];
+  slices: { emoji: string; label: string; cents: number; color: string }[];
   total: number;
   currency: string;
 }) {
-  const R = 42;
+  const CX = 100;
+  const CY = 90;
+  const R = 46;
+  const SW = 15;
+  const RL = R + 18; // label radius
   const C = 2 * Math.PI * R;
   const centerMoney = formatMoney(total, currency).replace(/[.,]00$/, "");
-  let acc = 0;
+  let acc = 0; // cumulative fraction
 
   return (
     <div className="flex items-center justify-center py-1">
-      <svg viewBox="0 0 120 120" width="180" height="180" role="img" aria-label="Spending by category">
-        <g transform="rotate(-90 60 60)">
-          <circle cx="60" cy="60" r={R} fill="none" stroke="var(--color-surface-2)" strokeWidth="16" />
+      <svg viewBox="0 0 200 180" width="100%" style={{ maxWidth: 260 }} role="img" aria-label="Spending by category">
+        <g transform={`rotate(-90 ${CX} ${CY})`}>
+          <circle cx={CX} cy={CY} r={R} fill="none" stroke="var(--color-surface-2)" strokeWidth={SW} />
           {slices.map((s, i) => {
             const frac = total > 0 ? s.cents / total : 0;
             const dash = frac * C;
@@ -643,22 +648,52 @@ function CategoryDonut({
             return (
               <circle
                 key={i}
-                cx="60"
-                cy="60"
+                cx={CX}
+                cy={CY}
                 r={R}
                 fill="none"
                 stroke={s.color}
-                strokeWidth="16"
+                strokeWidth={SW}
                 strokeDasharray={`${dash} ${C - dash}`}
                 strokeDashoffset={offset}
               />
             );
           })}
         </g>
-        <text x="60" y="57" textAnchor="middle" fontSize="15" fontWeight="700" fill="var(--color-text)">
+
+        {/* Labels around the ring (skip tiny slices to avoid collisions). */}
+        {(() => {
+          let cum = 0;
+          return slices.map((s, i) => {
+            const frac = total > 0 ? s.cents / total : 0;
+            const mid = cum + frac / 2;
+            cum += frac;
+            const pct = Math.round(frac * 100);
+            if (pct < 5) return null;
+            const theta = mid * 2 * Math.PI; // 0 at top, clockwise
+            const lx = CX + RL * Math.sin(theta);
+            const ly = CY - RL * Math.cos(theta);
+            const anchor = lx < CX - 2 ? "end" : lx > CX + 2 ? "start" : "middle";
+            return (
+              <text
+                key={i}
+                x={lx}
+                y={ly}
+                textAnchor={anchor}
+                dominantBaseline="middle"
+                fontSize="9"
+                fill="var(--color-muted)"
+              >
+                {s.emoji} {pct}%
+              </text>
+            );
+          });
+        })()}
+
+        <text x={CX} y={CY - 2} textAnchor="middle" fontSize="16" fontWeight="700" fill="var(--color-text)">
           {centerMoney}
         </text>
-        <text x="60" y="71" textAnchor="middle" fontSize="8.5" fill="var(--color-muted)">
+        <text x={CX} y={CY + 12} textAnchor="middle" fontSize="8.5" fill="var(--color-muted)">
           total
         </text>
       </svg>
