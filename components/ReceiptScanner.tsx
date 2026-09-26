@@ -3,13 +3,14 @@
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import type { Profile, GroupCategory } from "@/lib/types";
+import type { Profile, GroupCategory, SplitType } from "@/lib/types";
 import { buildCategoryList } from "@/lib/categories";
-import { toCents, fromCents } from "@/lib/split";
+import { toCents, fromCents, computeSplit, validateSplit } from "@/lib/split";
 import { formatMoney, profileName } from "@/lib/balances";
 import { parseReceiptText, computeItemizedOwed } from "@/lib/receipt";
 import BackHeader from "@/components/BackHeader";
 import CategoryPicker from "@/components/CategoryPicker";
+import SplitEditor, { type SplitRowState, rowsToInputs } from "@/components/SplitEditor";
 
 const CURRENCIES = ["EUR", "USD", "GBP"];
 
@@ -126,6 +127,14 @@ export default function ReceiptScanner({
   const [copiedText, setCopiedText] = useState(false);
 
   const [items, setItems] = useState<Item[]>([]);
+  // "items" = assign each line item (equal split among assignees).
+  // "total" = split the whole receipt total with any of the 5 methods.
+  const [mode, setMode] = useState<"items" | "total">("items");
+  const [totalInput, setTotalInput] = useState("");
+  const [splitType, setSplitType] = useState<SplitType>("equal");
+  const [rows, setRows] = useState<SplitRowState[]>(() =>
+    members.map((m) => ({ userId: m.id, selected: true, value: "" })),
+  );
   const [title, setTitle] = useState("Receipt");
   const [category, setCategory] = useState("dining");
   const [currency, setCurrency] = useState(defaultCurrency);
@@ -163,37 +172,37 @@ export default function ReceiptScanner({
       const text = data.text || "";
       setRawText(text);
       const parsed = parseReceiptText(text);
-      let newItems: Item[] = parsed.items.map((it, i) => ({
+      const newItems: Item[] = parsed.items.map((it, i) => ({
         id: `${Date.now()}-${i}`,
         description: it.description,
         price: (it.priceCents / 100).toFixed(2),
         memberIds: [...allIds],
       }));
+      setItems(newItems);
 
       const itemsSum = parsed.items.reduce((s, it) => s + it.priceCents, 0);
-      const total = parsed.totalCents;
-      const totalItem = (): Item => ({
-        id: `${Date.now()}-total`,
-        description: "Receipt total",
-        price: ((total as number) / 100).toFixed(2),
-        memberIds: [...allIds],
-      });
+      const total = parsed.totalCents; // grand total from the receipt, if found
+      const detected = total ?? itemsSum;
+      setTotalInput(detected > 0 ? (detected / 100).toFixed(2) : "");
 
-      if (newItems.length > 0 && total != null && Math.abs(itemsSum - total) > 2) {
-        // The parsed items don't add up to the printed total (poor OCR on the
-        // item rows). Trust the total instead of a wrong itemised sum: seed a
-        // single line at the printed total, which the user can still split.
-        newItems = [totalItem()];
-        setOcrNote(`The scanned items didn't add up to the printed total (${formatMoney(total, currency)}) — using the total. Tap “+ Add” to enter items by hand.`);
-      } else if (newItems.length === 0 && total != null && total > 0) {
-        // Couldn't split into line items, but we found a total — seed it so the
-        // amount is captured and can be assigned/split.
-        newItems.push(totalItem());
-        setOcrNote("Couldn't read individual items, but caught the total — check it and split, or tap “+ Add” for line items.");
-      } else if (newItems.length === 0) {
-        setOcrNote("Couldn't read this receipt automatically — add items below (or check the scanned text).");
+      // Pick a sensible default mode. Keep the parsed items in all cases so the
+      // user can switch to "Per item" and correct them.
+      if (newItems.length === 0) {
+        setMode("total");
+        setOcrNote(
+          detected > 0
+            ? "Couldn't read individual items — split the total below, or add items by hand under “Per item”."
+            : "Couldn't read this receipt automatically — enter the amount below or add items by hand.",
+        );
+      } else if (total != null && Math.abs(itemsSum - total) > 2) {
+        // Items don't reconcile with the printed total (OCR mis-read a line).
+        setMode("total");
+        setOcrNote(
+          `The scanned items didn't add up to the total (${formatMoney(total, currency)}) — showing the total. Switch to “Per item” to assign line items.`,
+        );
+      } else {
+        setMode("items");
       }
-      setItems(newItems);
     } catch {
       setOcrNote("OCR failed on this image — you can still enter items manually.");
       setItems([]);
@@ -229,9 +238,24 @@ export default function ReceiptScanner({
     );
   }, [items]);
 
-  const totalCents = items.reduce((s, it) => s + toCents(parseNum(it.price)), 0);
+  // "Per item" totals.
+  const itemsTotalCents = items.reduce((s, it) => s + toCents(parseNum(it.price)), 0);
   const unassigned = items.some((it) => toCents(parseNum(it.price)) !== 0 && it.memberIds.length === 0);
-  const canSave = totalCents > 0 && !unassigned && title.trim().length > 0 && !saving;
+
+  // "Split total" mode: run the chosen method over the entered total.
+  const totalModeCents = toCents(parseNum(totalInput));
+  const splitValidation = useMemo(
+    () => validateSplit(splitType, totalModeCents, rowsToInputs(rows)),
+    [splitType, totalModeCents, rows],
+  );
+
+  const effectiveTotal = mode === "items" ? itemsTotalCents : totalModeCents;
+  const canSave =
+    title.trim().length > 0 &&
+    !saving &&
+    (mode === "items"
+      ? itemsTotalCents > 0 && !unassigned
+      : totalModeCents > 0 && splitValidation.ok);
 
   async function save() {
     if (!canSave) return;
@@ -258,10 +282,12 @@ export default function ReceiptScanner({
           group_id: groupId,
           title: title.trim(),
           category,
-          amount: fromCents(totalCents),
+          amount: fromCents(effectiveTotal),
           currency,
           paid_by: paidBy,
-          split_type: "amount",
+          // Per-item assignment stores exact per-person amounts; total mode keeps
+          // the method the user chose.
+          split_type: mode === "items" ? "amount" : splitType,
           receipt_url: receiptUrl,
           expense_date: expenseDate,
           created_by: meId,
@@ -270,14 +296,22 @@ export default function ReceiptScanner({
         .single();
       if (eErr) throw eErr;
 
-      const splitRows = [...owed.entries()]
-        .filter(([, cents]) => cents !== 0)
-        .map(([userId, cents]) => ({
-          expense_id: exp.id,
-          user_id: userId,
-          amount_owed: fromCents(cents),
-          raw_value: fromCents(cents),
-        }));
+      const splitRows =
+        mode === "items"
+          ? [...owed.entries()]
+              .filter(([, cents]) => cents !== 0)
+              .map(([userId, cents]) => ({
+                expense_id: exp.id,
+                user_id: userId,
+                amount_owed: fromCents(cents),
+                raw_value: fromCents(cents),
+              }))
+          : computeSplit(splitType, totalModeCents, rowsToInputs(rows)).map((r) => ({
+              expense_id: exp.id,
+              user_id: r.userId,
+              amount_owed: fromCents(r.owedCents),
+              raw_value: r.rawValue,
+            }));
       const { error: sErr } = await supabase.from("expense_splits").insert(splitRows);
       if (sErr) throw sErr;
 
@@ -377,10 +411,30 @@ export default function ReceiptScanner({
 
         <CategoryPicker value={category} onChange={setCategory} categories={categoryList} />
 
+        {/* Split-mode toggle: assign each line, or split the whole total. */}
+        <div className="flex rounded-full bg-surface-2 p-1 text-sm font-medium">
+          <button
+            type="button"
+            onClick={() => setMode("items")}
+            className={`flex-1 rounded-full py-2 ${mode === "items" ? "bg-brand text-black" : "text-muted"}`}
+          >
+            Per item
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("total")}
+            className={`flex-1 rounded-full py-2 ${mode === "total" ? "bg-brand text-black" : "text-muted"}`}
+          >
+            Split total
+          </button>
+        </div>
+
+        {mode === "items" ? (
+        <>
         {/* Items */}
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-muted">Items — tap avatars to assign</p>
+            <p className="text-sm font-medium text-muted">Items — tap names to assign</p>
             <button onClick={addItem} className="text-sm text-brand">+ Add</button>
           </div>
 
@@ -427,26 +481,55 @@ export default function ReceiptScanner({
         </div>
 
         {unassigned && <p className="text-sm text-danger">Every item with a price needs at least one person.</p>}
-
-        {/* Totals */}
-        <div className="rounded-2xl bg-surface p-4">
-          <div className="mb-2 flex items-center justify-between font-semibold">
-            <span>Total</span>
-            <span>{formatMoney(totalCents, currency)}</span>
+        </>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <label className="flex items-center justify-between rounded-xl bg-surface px-4 py-3">
+              <span className="text-sm text-muted">Total amount</span>
+              <input
+                value={totalInput}
+                onChange={(e) => setTotalInput(e.target.value)}
+                inputMode="decimal"
+                placeholder="0.00"
+                className="w-28 bg-transparent text-right text-lg font-semibold outline-none focus:text-brand"
+              />
+            </label>
+            <div>
+              <p className="mb-2 text-sm font-medium text-muted">How to split</p>
+              <SplitEditor
+                type={splitType}
+                onTypeChange={setSplitType}
+                members={members}
+                rows={rows}
+                setRows={setRows}
+                totalCents={totalModeCents}
+                currency={currency}
+              />
+            </div>
           </div>
-          <ul className="flex flex-col gap-1">
-            {members.map((m) => {
-              const c = owed.get(m.id) ?? 0;
-              if (c === 0) return null;
-              return (
-                <li key={m.id} className="flex items-center justify-between text-sm text-muted">
-                  <span>{m.id === meId ? "You" : profileName(m)}</span>
-                  <span>{formatMoney(c, currency)}</span>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
+        )}
+
+        {/* Per-item breakdown (only in item mode; SplitEditor shows its own). */}
+        {mode === "items" && (
+          <div className="rounded-2xl bg-surface p-4">
+            <div className="mb-2 flex items-center justify-between font-semibold">
+              <span>Total</span>
+              <span>{formatMoney(itemsTotalCents, currency)}</span>
+            </div>
+            <ul className="flex flex-col gap-1">
+              {members.map((m) => {
+                const c = owed.get(m.id) ?? 0;
+                if (c === 0) return null;
+                return (
+                  <li key={m.id} className="flex items-center justify-between text-sm text-muted">
+                    <span>{m.id === meId ? "You" : profileName(m)}</span>
+                    <span>{formatMoney(c, currency)}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
 
         {error && <p className="text-sm text-danger">{error}</p>}
 

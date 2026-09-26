@@ -171,7 +171,14 @@ export function parseReceiptText(text: string): ParsedReceipt {
     }
 
     let cents = toCents(parseAmount(a.raw));
-    let label = cleanLabel(line.slice(0, a.index).replace(TRAILING_VAT_PCT_RE, ""));
+    let label = cleanLabel(
+      line
+        .slice(0, a.index)
+        .replace(TRAILING_VAT_PCT_RE, "")
+        .replace(/[£$€]/g, " ") // currency symbol next to the price
+        .replace(/^\s*\d{5,}\s+/, "") // leading PLU / item code (e.g. M&S "00869256")
+        .replace(/^\s*\*+\s*/, ""), // leading multibuy marker "*"
+    );
     let qty = 1;
 
     const qu = line.match(QTY_UNIT_RE);
