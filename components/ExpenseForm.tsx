@@ -8,6 +8,7 @@ import type { Profile, SplitType, ExpenseWithSplits, GroupCategory } from "@/lib
 import { buildCategoryList } from "@/lib/categories";
 import { computeSplit, validateSplit, toCents, fromCents } from "@/lib/split";
 import { profileName } from "@/lib/balances";
+import { saveOptimisticExpense } from "@/lib/optimistic";
 import BackHeader from "@/components/BackHeader";
 import EmojiPicker from "@/components/EmojiPicker";
 import CategoryPicker from "@/components/CategoryPicker";
@@ -139,6 +140,32 @@ export default function ExpenseForm({
           .update({ added_group_id: groupId, added_expense_id: expenseId })
           .eq("id", sourceTxId);
       }
+
+      // Optimistic update: store this expense so the feed displays it immediately
+      const optimisticItem: ExpenseWithSplits = {
+        id: expenseId!,
+        group_id: groupId,
+        title: payload.title,
+        emoji: payload.emoji,
+        category: payload.category,
+        amount: payload.amount,
+        currency: payload.currency,
+        paid_by: payload.paid_by,
+        split_type: payload.split_type,
+        receipt_url: payload.receipt_url,
+        notes: payload.notes,
+        expense_date: payload.expense_date,
+        created_by: initial?.created_by ?? meId,
+        created_at: initial?.created_at ?? new Date().toISOString(),
+        splits: splitRows.map((r, idx) => ({
+          id: `opt-${expenseId}-${idx}`,
+          expense_id: expenseId!,
+          user_id: r.user_id,
+          amount_owed: r.amount_owed,
+          raw_value: r.raw_value ?? null,
+        })),
+      };
+      saveOptimisticExpense(groupId, optimisticItem);
 
       router.replace(editing ? `/groups/${groupId}/expenses/${expenseId}` : `/groups/${groupId}`);
       router.refresh();

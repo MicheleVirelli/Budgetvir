@@ -8,6 +8,7 @@ import type { ExpenseWithSplits, Profile, GroupCategory } from "@/lib/types";
 import { toCents } from "@/lib/split";
 import { formatMoney, profileName } from "@/lib/balances";
 import { buildCategoryList, expenseIcon } from "@/lib/categories";
+import { getOptimisticExpenses, removeOptimisticExpense } from "@/lib/optimistic";
 
 const PAGE = 20;
 
@@ -26,10 +27,52 @@ export default function GroupFeed({
 }) {
   const allCategories = buildCategoryList(groupCategories);
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [query, setQuery] = useState("");
   const [cat, setCat] = useState<string | null>(null);
   const [limit, setLimit] = useState(PAGE);
+
+  // Optimistic list initialized from client storage
+  const [optimisticList, setOptimisticList] = useState<ExpenseWithSplits[]>(() => {
+    if (typeof window === "undefined") return [];
+    return getOptimisticExpenses(groupId);
+  });
+
+  // Reconcile optimistic items whenever fresh server expenses arrive
+  useEffect(() => {
+    const serverIds = new Set(expenses.map((e) => e.id));
+    const remaining = getOptimisticExpenses(groupId).filter((item) => {
+      if (serverIds.has(item.id)) {
+        removeOptimisticExpense(groupId, item.id);
+        return false;
+      }
+      return true;
+    });
+    setOptimisticList(remaining);
+  }, [expenses, groupId]);
+
+  // Listen for real-time optimistic expenses dispatched on form submission
+  useEffect(() => {
+    function handleOptimisticEvent(e: Event) {
+      const customEvent = e as CustomEvent<{ groupId: string; expense: ExpenseWithSplits }>;
+      if (customEvent.detail?.groupId === groupId) {
+        const newExp = customEvent.detail.expense;
+        setOptimisticList((prev) => [newExp, ...prev.filter((p) => p.id !== newExp.id)]);
+      }
+    }
+    window.addEventListener("budgetvir:optimistic_expense", handleOptimisticEvent);
+    return () => {
+      window.removeEventListener("budgetvir:optimistic_expense", handleOptimisticEvent);
+    };
+  }, [groupId]);
+
+  // Combine server expenses with any pending optimistic items (at the top)
+  const combinedExpenses = useMemo(() => {
+    if (optimisticList.length === 0) return expenses;
+    const serverIds = new Set(expenses.map((e) => e.id));
+    const unconfirmed = optimisticList.filter((item) => !serverIds.has(item.id));
+    return [...unconfirmed, ...expenses];
+  }, [expenses, optimisticList]);
 
   // Materialise any due recurring expenses once when the group opens.
   useEffect(() => {
@@ -43,22 +86,22 @@ export default function GroupFeed({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupId]);
+  }, [groupId, supabase]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return expenses.filter((e) => {
+    return combinedExpenses.filter((e) => {
       if (cat && e.category !== cat) return false;
       if (q && !e.title.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [expenses, query, cat]);
+  }, [combinedExpenses, query, cat]);
 
   const shown = filtered.slice(0, limit);
   const usedCategories = useMemo(() => {
-    const set = new Set(expenses.map((e) => e.category));
+    const set = new Set(combinedExpenses.map((e) => e.category));
     return allCategories.filter((c) => set.has(c.key));
-  }, [expenses, allCategories]);
+  }, [combinedExpenses, allCategories]);
 
   return (
     <div className="px-4">
@@ -92,7 +135,7 @@ export default function GroupFeed({
       {shown.length === 0 ? (
         <div className="flex flex-col items-center gap-2 pt-16 text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-surface text-3xl">🧾</div>
-          <p className="text-muted">{expenses.length === 0 ? "No expenses yet." : "No matches."}</p>
+          <p className="text-muted">{combinedExpenses.length === 0 ? "No expenses yet." : "No matches."}</p>
         </div>
       ) : (
         <ul className="flex flex-col">

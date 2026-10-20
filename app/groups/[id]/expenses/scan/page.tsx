@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { getGroupData } from "@/lib/data";
+import { getGroupMeta } from "@/lib/data";
 import { getSessionProfile } from "@/lib/supabase/auth";
 import ReceiptScanner from "@/components/ReceiptScanner";
 
@@ -14,16 +14,16 @@ export default async function ScanReceiptPage({
   const me = await getSessionProfile();
   if (!me) redirect("/login");
 
-  const data = await getGroupData(id);
-  if (!data) notFound();
+  const meta = await getGroupMeta(id);
+  if (!meta) notFound();
 
   return (
     <ReceiptScanner
       groupId={id}
-      members={data.members}
+      members={meta.members}
       meId={me.id}
-      defaultCurrency={data.group.default_currency ?? "EUR"}
-      groupCategories={data.categories}
+      defaultCurrency={meta.group.default_currency ?? "EUR"}
+      groupCategories={meta.categories}
     />
   );
 }

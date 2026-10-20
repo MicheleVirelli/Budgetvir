@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { getGroupData, findProfile } from "@/lib/data";
+import { getGroupMeta, getSingleExpense, findProfile } from "@/lib/data";
 import { getSessionProfile } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
 import { toCents } from "@/lib/split";
@@ -31,11 +31,11 @@ export default async function ExpenseDetailPage({
   const me = await getSessionProfile();
   if (!me) redirect("/login");
 
-  const data = await getGroupData(id);
-  if (!data) notFound();
-
-  const expense = data.expenses.find((e) => e.id === expenseId);
-  if (!expense) notFound();
+  const [meta, expense] = await Promise.all([
+    getGroupMeta(id),
+    getSingleExpense(expenseId),
+  ]);
+  if (!meta || !expense || expense.group_id !== id) notFound();
 
   const supabase = await createClient();
   const { data: commentRows } = await supabase
@@ -45,8 +45,8 @@ export default async function ExpenseDetailPage({
     .order("created_at", { ascending: true });
   const comments = (commentRows ?? []) as unknown as ExpenseComment[];
 
-  const payer = findProfile(data.members, expense.paid_by);
-  const category = resolveCategory(expense.category, data.categories);
+  const payer = findProfile(meta.members, expense.paid_by);
+  const category = resolveCategory(expense.category, meta.categories);
 
   return (
     <div className="flex min-h-dvh flex-col pb-8">
@@ -82,7 +82,7 @@ export default async function ExpenseDetailPage({
 
       <div className="flex flex-col items-center gap-2 px-4 py-6 text-center">
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-surface text-3xl">
-          {expenseIcon(expense.emoji, expense.category, data.categories)}
+          {expenseIcon(expense.emoji, expense.category, meta.categories)}
         </div>
         <h1 className="text-xl font-semibold">{expense.title}</h1>
         <p className="text-3xl font-bold">{formatMoney(toCents(expense.amount), expense.currency)}</p>
@@ -112,7 +112,7 @@ export default async function ExpenseDetailPage({
         <p className="mb-2 text-sm font-medium text-muted">{SPLIT_LABEL[expense.split_type] ?? "Split"}</p>
         <ul className="flex flex-col overflow-hidden rounded-2xl bg-surface">
           {expense.splits.map((s) => {
-            const member = findProfile(data.members, s.user_id);
+            const member = findProfile(meta.members, s.user_id);
             return (
               <li key={s.id} className="flex items-center gap-3 border-b border-border/50 px-4 py-3 last:border-b-0">
                 <Avatar src={member?.avatar_url} name={member?.display_name} email={member?.email} size={36} />
@@ -135,7 +135,7 @@ export default async function ExpenseDetailPage({
         </div>
       )}
 
-      <Comments expenseId={expense.id} meId={me.id} members={data.members} initial={comments} />
+      <Comments expenseId={expense.id} meId={me.id} members={meta.members} initial={comments} />
     </div>
   );
 }

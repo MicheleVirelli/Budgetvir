@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { getGroupData } from "@/lib/data";
+import { getGroupFeedData } from "@/lib/data";
 import { getSessionProfile } from "@/lib/supabase/auth";
 import { netByCurrency, myNetSummary } from "@/lib/balances";
 import GroupHeader from "./GroupHeader";
@@ -17,10 +17,10 @@ export default async function GroupPage({
   const me = await getSessionProfile();
   if (!me) redirect("/login");
 
-  const data = await getGroupData(id);
+  const data = await getGroupFeedData(id);
   if (!data) notFound();
 
-  const { group, members, expenses, settlements } = data;
+  const { group, members, expenses, settlements, categories } = data;
 
   const forBalance = expenses.map((e) => ({
     amount: e.amount,
@@ -53,7 +53,7 @@ export default async function GroupPage({
       </div>
 
       <main className="flex-1">
-        <GroupFeed groupId={group.id} expenses={expenses} members={members} meId={me.id} groupCategories={data.categories} />
+        <GroupFeed groupId={group.id} expenses={expenses} members={members} meId={me.id} groupCategories={categories} />
       </main>
 
       <Link

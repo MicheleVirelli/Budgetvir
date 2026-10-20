@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { getGroupData } from "@/lib/data";
+import { getGroupMeta, getSingleExpense } from "@/lib/data";
 import { getSessionProfile } from "@/lib/supabase/auth";
 import ExpenseForm from "@/components/ExpenseForm";
 
@@ -14,20 +14,20 @@ export default async function EditExpensePage({
   const me = await getSessionProfile();
   if (!me) redirect("/login");
 
-  const data = await getGroupData(id);
-  if (!data) notFound();
-
-  const expense = data.expenses.find((e) => e.id === expenseId);
-  if (!expense) notFound();
+  const [meta, expense] = await Promise.all([
+    getGroupMeta(id),
+    getSingleExpense(expenseId),
+  ]);
+  if (!meta || !expense || expense.group_id !== id) notFound();
 
   return (
     <ExpenseForm
       groupId={id}
-      members={data.members}
+      members={meta.members}
       meId={me.id}
-      defaultCurrency={data.group.default_currency ?? "EUR"}
+      defaultCurrency={meta.group.default_currency ?? "EUR"}
       initial={expense}
-      groupCategories={data.categories}
+      groupCategories={meta.categories}
     />
   );
 }
