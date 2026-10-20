@@ -58,6 +58,7 @@ export default async function GroupPage({
 
       <Link
         href={`/groups/${group.id}/expenses/new`}
+        prefetch={true}
         className="fixed bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full bg-brand px-6 py-3.5 font-semibold text-black shadow-lg"
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
@@ -88,6 +89,7 @@ function Chip({
   return (
     <Link
       href={href}
+      prefetch={true}
       className={`shrink-0 whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium ${
         accent ? "bg-brand text-black" : "border border-border active:bg-surface"
       }`}

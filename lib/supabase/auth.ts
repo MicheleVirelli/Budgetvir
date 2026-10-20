@@ -1,11 +1,13 @@
+import { cache } from "react";
 import { createClient } from "./server";
 import type { Profile } from "../types";
 
 /**
  * Get the current auth user + their profile row (server-side).
+ * Cached per-request to avoid multiple round-trips within the same render.
  * Returns null when signed out.
  */
-export async function getSessionProfile(): Promise<Profile | null> {
+export const getSessionProfile = cache(async (): Promise<Profile | null> => {
   const supabase = await createClient();
   const {
     data: { user },
@@ -27,4 +29,4 @@ export async function getSessionProfile(): Promise<Profile | null> {
     display_name: (user.user_metadata?.display_name as string) ?? null,
     avatar_url: (user.user_metadata?.avatar_url as string) ?? null,
   };
-}
+});
