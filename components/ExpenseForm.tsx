@@ -112,7 +112,9 @@ export default function ExpenseForm({
         raw_value: r.rawValue,
       }));
 
-      // Atomic save via PostgreSQL function: inserts/updates expense and splits in a single transaction
+      let expenseId: string | null = null;
+
+      // Try atomic save via PostgreSQL RPC
       const { data: savedId, error: rpcErr } = await supabase.rpc("save_expense_atomic", {
         p_expense_id: editing ? initial!.id : null,
         p_group_id: groupId,
@@ -129,8 +131,49 @@ export default function ExpenseForm({
         p_splits: splitInputs,
       });
 
-      if (rpcErr) throw rpcErr;
-      const expenseId = (savedId || initial?.id) as string;
+      // Graceful fallback: if the RPC does not exist on Supabase yet, save directly
+      const isMissingRpc =
+        Boolean(rpcErr &&
+        (rpcErr.code === "PGRST202" ||
+          rpcErr.code === "42883" ||
+          rpcErr.message?.includes("save_expense_atomic") ||
+          rpcErr.message?.includes("function") ||
+          rpcErr.message?.includes("does not exist")));
+
+      if (rpcErr && isMissingRpc) {
+        if (editing) {
+          const { error: uErr } = await supabase.from("expenses").update(payload).eq("id", initial!.id);
+          if (uErr) throw uErr;
+          const { error: dErr } = await supabase.from("expense_splits").delete().eq("expense_id", initial!.id);
+          if (dErr) throw dErr;
+          expenseId = initial!.id;
+        } else {
+          const { data, error: iErr } = await supabase
+            .from("expenses")
+            .insert({ ...payload, group_id: groupId, created_by: meId })
+            .select("id")
+            .single();
+          if (iErr) throw iErr;
+          expenseId = data.id;
+        }
+
+        const splitRows = results.map((r) => ({
+          expense_id: expenseId!,
+          user_id: r.userId,
+          amount_owed: fromCents(r.owedCents),
+          raw_value: r.rawValue,
+        }));
+        const { error: sErr } = await supabase.from("expense_splits").insert(splitRows);
+        if (sErr) throw sErr;
+      } else if (rpcErr) {
+        throw rpcErr;
+      } else {
+        expenseId = (savedId || initial?.id) as string;
+      }
+
+      if (!expenseId) {
+        throw new Error("Could not determine saved expense ID.");
+      }
 
       // If this expense came from a bank transaction, tag that transaction with
       // where it landed (the original stays in the channel). RLS scopes it to me.
@@ -182,8 +225,14 @@ export default function ExpenseForm({
 
       router.replace(editing ? `/groups/${groupId}/expenses/${expenseId}` : `/groups/${groupId}`);
       router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save expense.");
+    } catch (err: unknown) {
+      const msg =
+        err && typeof err === "object" && "message" in err
+          ? String((err as { message: unknown }).message)
+          : err instanceof Error
+          ? err.message
+          : "Could not save expense.";
+      setError(msg);
       setLoading(false);
     }
   }
