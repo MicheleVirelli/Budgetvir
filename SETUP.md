@@ -5,32 +5,10 @@ A personalized Splitwise built with Next.js + Supabase, deployed on Vercel.
 ## 1. Supabase database
 
 1. Open your project → **SQL Editor**.
-2. Paste and run [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql)
-   (core tables, RLS policies, signup trigger).
-3. Paste and run [`supabase/migrations/0002_storage.sql`](supabase/migrations/0002_storage.sql)
-   (creates the `avatars` and `receipts` storage buckets + policies).
-4. Paste and run [`supabase/migrations/0003_pro.sql`](supabase/migrations/0003_pro.sql)
-   (settlements, comments, activity feed + triggers, recurring expenses,
-   categories/notes, group settings, invite/join + recurring RPCs).
-5. Paste and run [`supabase/migrations/0004_fix_group_create.sql`](supabase/migrations/0004_fix_group_create.sql)
-   (lets a group's creator read back their new group and add themselves as the
-   first member — fixes group creation).
+2. Paste and run [`supabase/schema.sql`](supabase/schema.sql)
+   (creates all core tables, storage buckets, RLS policies, signup & activity triggers, performance indexes, push notifications subscriptions, and atomic stored procedures).
 
-6. Run the remaining migrations in order:
-   `0005_placeholders.sql`, `0006_recurring_interval.sql`, `0007_group_categories.sql`,
-   `0008_merge_placeholder.sql`, `0009_budgets.sql`.
-7. Paste and run [`supabase/migrations/0010_bank.sql`](supabase/migrations/0010_bank.sql)
-   (bank/card connection tables + RLS — needed only for the "Bank & cards" feature).
-
-> The migrations are idempotent — safe to re-run.
-
-### Optional: demo data
-
-After signing up **a@email.com**, **b@email.com** and **c@email.com** in the
-app, run [`supabase/seed_demo.sql`](supabase/seed_demo.sql) in the SQL Editor to
-create a fully populated 3-person group ("Viaggio a Lisbona") with expenses in
-every split mode, settlements and a recurring template. It skips itself if the
-group already exists.
+> The schema is idempotent — safe to run on a fresh database or re-run on existing setups.
 
 ## 2. Supabase Auth
 
@@ -86,7 +64,7 @@ Setup:
    For `ENABLEBANKING_PRIVATE_KEY`, paste the PEM as-is (multi-line) or with `\n` escapes —
    both are handled. For local dev, put the same in `.env.local` and use
    `http://localhost:3000/api/bank/callback`.
-4. Run migration `0010_bank.sql` (step 1.7 above).
+4. Bank connection tables are already included in [`supabase/schema.sql`](supabase/schema.sql).
 5. Test against a **sandbox** ASPSP first, then your real bank. Transactions are stored in
    your Supabase, locked per-user by RLS. Syncing is on demand ("Sync now"), with a 6-hour
    cooldown to respect bank rate limits.
@@ -130,7 +108,7 @@ Vercel project settings.
   Splitwise CSV export** (group settings → Import) with column→member mapping.
 - Search + category filters on the expense feed.
 - Installable **PWA** — in-app install button + `/install` guide with QR.
+- Native **Web Push Notifications** for group expenses and activity.
 - Profile page with display name + avatar.
 
-Deferred: real receipt OCR, payment-provider integrations, email invitations,
-push notifications.
+Deferred: real receipt OCR, payment-provider integrations, email invitations.
