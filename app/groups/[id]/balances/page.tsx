@@ -12,7 +12,6 @@ import {
 } from "@/lib/balances";
 import type { Profile } from "@/lib/types";
 import Avatar from "@/components/Avatar";
-import BackHeader from "@/components/BackHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -44,20 +43,18 @@ export default async function BalancesPage({
   const settled = currencies.every((c) => [...(net.get(c)?.values() ?? [])].every((v) => v === 0));
 
   return (
-    <div className="flex min-h-dvh flex-col">
-      <BackHeader
-        title="Balances"
-        action={
-          <Link
-            href={`/groups/${id}/settle`}
-            className="rounded-full bg-brand px-3 py-1.5 text-sm font-semibold text-black"
-          >
-            Settle up
-          </Link>
-        }
-      />
+    <div className="flex flex-col">
+      <div className="flex items-center justify-between px-4 pt-2">
+        <h2 className="text-xl font-bold">Balances</h2>
+        <Link
+          href={`/groups/${id}/settle`}
+          className="rounded-full bg-brand px-3 py-1.5 text-sm font-semibold text-black"
+        >
+          Settle up
+        </Link>
+      </div>
 
-      <div className="flex items-center justify-between px-4 pt-3 text-xs text-muted">
+      <div className="flex items-center justify-between px-4 pt-2 text-xs text-muted">
         <span>{simplify ? "Simplified debts on" : "Showing all debts"}</span>
         <Link href={`/groups/${id}/settings`} className="text-brand">
           {simplify ? "Turn off in settings" : "Simplify in settings"}

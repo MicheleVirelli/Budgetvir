@@ -6,7 +6,7 @@ import { toCents } from "@/lib/split";
 import { formatMoney, profileName } from "@/lib/balances";
 import { resolveCategory } from "@/lib/categories";
 import { TOTAL_BUDGET_KEY, type GroupCategory } from "@/lib/types";
-import BackHeader from "@/components/BackHeader";
+// BackHeader removed
 import ChartsDateRange from "./ChartsDateRange";
 
 export const dynamic = "force-dynamic";
@@ -141,14 +141,12 @@ export default async function ChartsPage({
 
   return (
     <div className="flex min-h-dvh flex-col pb-10">
-      <BackHeader
-        title="Charts"
-        action={
-          <a href={`/groups/${id}/export`} className="rounded-full border border-border px-3 py-1.5 text-sm text-brand">
-            Export CSV
-          </a>
-        }
-      />
+      <div className="flex items-center justify-between px-4 pt-2">
+        <h2 className="text-xl font-bold">Charts</h2>
+        <a href={`/groups/${id}/export`} className="rounded-full border border-border px-3 py-1.5 text-sm text-brand">
+          Export CSV
+        </a>
+      </div>
 
       <div className="px-4 pt-3">
         <ChartsDateRange from={from} to={to} />

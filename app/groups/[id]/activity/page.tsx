@@ -4,7 +4,6 @@ import { getSessionProfile } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
 import { describeActivity, timeAgo } from "@/lib/activity";
 import type { Activity, Profile } from "@/lib/types";
-import BackHeader from "@/components/BackHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -31,8 +30,8 @@ export default async function GroupActivityPage({
   const activities = (acts ?? []) as unknown as Activity[];
 
   return (
-    <div className="flex min-h-dvh flex-col">
-      <BackHeader title="Activity" />
+    <div className="flex flex-col">
+      <h2 className="px-4 pt-2 text-xl font-bold">Activity</h2>
       <ul className="flex flex-col px-4 py-2">
         {activities.length === 0 && <li className="pt-16 text-center text-muted">No activity yet.</li>}
         {activities.map((a) => {

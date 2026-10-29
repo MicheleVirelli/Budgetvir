@@ -3,7 +3,6 @@ import { getGroupData } from "@/lib/data";
 import { getSessionProfile } from "@/lib/supabase/auth";
 import { profileName } from "@/lib/balances";
 import Avatar from "@/components/Avatar";
-import BackHeader from "@/components/BackHeader";
 import AddMemberForm from "./AddMemberForm";
 import PlaceholderMerge from "./PlaceholderMerge";
 
@@ -24,10 +23,12 @@ export default async function MembersPage({
   const { group, members } = data;
 
   return (
-    <div className="flex min-h-dvh flex-col">
-      <BackHeader title="Members" />
+    <div className="flex flex-col">
+      <div className="px-4 pt-2">
+        <h2 className="text-xl font-bold">Members · {members.length}</h2>
+      </div>
 
-      <div className="px-4 py-4">
+      <div className="px-4 py-3">
         <AddMemberForm
           groupId={group.id}
           existingIds={members.map((m) => m.id)}
