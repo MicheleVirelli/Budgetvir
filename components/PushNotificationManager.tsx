@@ -67,7 +67,7 @@ export default function PushNotificationManager() {
       setPermission(perm);
 
       if (perm !== "granted") {
-        setStatusMessage("Permesso notifiche negato.");
+        setStatusMessage("Notification permission denied.");
         setLoading(false);
         return;
       }
@@ -93,13 +93,13 @@ export default function PushNotificationManager() {
       });
 
       if (!res.ok) {
-        throw new Error("Errore durante il salvataggio della sottoscrizione");
+        throw new Error("Failed to save push subscription on server");
       }
 
       setIsSubscribed(true);
-      setStatusMessage("Notifiche push attivate con successo! 🎉");
+      setStatusMessage("Push notifications enabled successfully! 🎉");
     } catch (err) {
-      setStatusMessage(err instanceof Error ? err.message : "Impossibile attivare le notifiche");
+      setStatusMessage(err instanceof Error ? err.message : "Could not enable push notifications");
     } finally {
       setLoading(false);
     }
@@ -122,9 +122,9 @@ export default function PushNotificationManager() {
       }
 
       setIsSubscribed(false);
-      setStatusMessage("Notifiche push disattivate.");
+      setStatusMessage("Push notifications disabled.");
     } catch (err) {
-      setStatusMessage(err instanceof Error ? err.message : "Errore durante la disattivazione");
+      setStatusMessage(err instanceof Error ? err.message : "Error disabling push notifications");
     } finally {
       setLoading(false);
     }
@@ -133,11 +133,11 @@ export default function PushNotificationManager() {
   if (supported === false) {
     return (
       <div className="mt-4 rounded-xl border border-border/60 bg-surface p-4 text-sm text-muted">
-        <p className="font-medium text-foreground">🔔 Notifiche non supportate</p>
+        <p className="font-medium text-foreground">🔔 Notifications not supported</p>
         <p className="mt-1 text-xs">
           {isIOS && !isStandalone
-            ? "Su iPhone devi prima aggiungere l'app alla Home Screen (Condividi → 'Aggiungi a schermata Home') per ricevere notifiche push."
-            : "Questo browser non supporta le notifiche Web Push."}
+            ? "On iPhone, you must first add the app to your Home Screen (Share → 'Add to Home Screen') to receive push notifications."
+            : "This browser does not support Web Push notifications."}
         </p>
       </div>
     );
@@ -149,9 +149,9 @@ export default function PushNotificationManager() {
         <div className="flex items-center gap-2.5">
           <span className="text-xl">🔔</span>
           <div>
-            <p className="font-medium">Notifiche Push</p>
+            <p className="font-medium">Push Notifications</p>
             <p className="text-xs text-muted">
-              {isSubscribed ? "Attive su questo dispositivo" : "Ricevi aggiornamenti sulle spese"}
+              {isSubscribed ? "Active on this device" : "Receive updates on expenses and payments"}
             </p>
           </div>
         </div>
@@ -162,7 +162,7 @@ export default function PushNotificationManager() {
             disabled={loading}
             className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted active:bg-surface-elevated disabled:opacity-50"
           >
-            Disattiva
+            Disable
           </button>
         ) : (
           <button
@@ -170,20 +170,20 @@ export default function PushNotificationManager() {
             disabled={loading}
             className="rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-black active:opacity-90 disabled:opacity-50"
           >
-            {loading ? "Attivando..." : "Attiva"}
+            {loading ? "Enabling..." : "Enable"}
           </button>
         )}
       </div>
 
       {isIOS && !isStandalone && (
         <p className="mt-3 rounded-lg bg-surface-elevated p-2 text-xs text-brand">
-          💡 <strong>Nota iOS:</strong> Per ricevere le notifiche su iPhone, installa l'app toccando Condividi ➔ <em>"Aggiungi a schermata Home"</em>.
+          💡 <strong>iOS Note:</strong> To receive push notifications on iPhone, install the app by tapping Share ➔ <em>"Add to Home Screen"</em>.
         </p>
       )}
 
       {permission === "denied" && (
         <p className="mt-2 text-xs text-danger">
-          I permessi delle notifiche sono bloccati nelle impostazioni del browser del tuo telefono.
+          Notification permissions are blocked in your browser/device settings.
         </p>
       )}
 

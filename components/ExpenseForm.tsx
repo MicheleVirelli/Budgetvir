@@ -217,8 +217,8 @@ export default function ExpenseForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           groupId,
-          title: editing ? `Spesa aggiornata` : `Nuova spesa: ${payload.title}`,
-          body: `${payerName} ha registrato ${payload.amount} ${payload.currency} per "${payload.title}"`,
+          title: editing ? `Expense updated` : `New expense: ${payload.title}`,
+          body: `${payerName} added ${payload.amount} ${payload.currency} for "${payload.title}"`,
           url: `/groups/${groupId}/expenses/${expenseId}`,
         }),
       }).catch(() => {});

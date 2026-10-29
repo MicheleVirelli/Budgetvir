@@ -66,8 +66,8 @@ export default function SettleForm({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         groupId,
-        title: "Pagamento registrato 🤝",
-        body: `${fromName} ha pagato ${amountCents / 100} ${currency} a ${toName}`,
+        title: "Payment recorded 🤝",
+        body: `${fromName} paid ${amountCents / 100} ${currency} to ${toName}`,
         url: `/groups/${groupId}/balances`,
       }),
     }).catch(() => {});

@@ -1,6 +1,6 @@
 // Budgetvir service worker — makes the app installable, provides offline fallback,
 // and handles Web Push notifications.
-const CACHE = "budgetvir-v2";
+const CACHE = "budgetvir-v3";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/icon.svg", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -61,7 +61,7 @@ self.addEventListener("push", (event) => {
 
   let payload = {
     title: "Budgetvir",
-    body: "Nuova attività nel gruppo",
+    body: "New group activity",
     icon: "/icon-192.png",
     badge: "/icon-192.png",
     url: "/",
