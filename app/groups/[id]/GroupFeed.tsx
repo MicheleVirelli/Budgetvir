@@ -10,8 +10,6 @@ import { formatMoney, profileName } from "@/lib/balances";
 import { buildCategoryList, expenseIcon } from "@/lib/categories";
 import { getOptimisticExpenses, removeOptimisticExpense } from "@/lib/optimistic";
 
-const PAGE = 20;
-
 export default function GroupFeed({
   groupId,
   expenses,
@@ -30,7 +28,20 @@ export default function GroupFeed({
   const supabase = useMemo(() => createClient(), []);
   const [query, setQuery] = useState("");
   const [cat, setCat] = useState<string | null>(null);
-  const [limit, setLimit] = useState(PAGE);
+
+  // Paginated expenses state
+  const [loadedExpenses, setLoadedExpenses] = useState<ExpenseWithSplits[]>(expenses);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(expenses.length >= 25);
+
+  // Sync when initial expenses prop changes (e.g. from router.refresh)
+  useEffect(() => {
+    setLoadedExpenses((prev) => {
+      const incomingIds = new Set(expenses.map((e) => e.id));
+      const previouslyAppended = prev.filter((p) => !incomingIds.has(p.id));
+      return [...expenses, ...previouslyAppended];
+    });
+  }, [expenses]);
 
   // Optimistic list initialized from client storage
   const [optimisticList, setOptimisticList] = useState<ExpenseWithSplits[]>(() => {
@@ -40,7 +51,7 @@ export default function GroupFeed({
 
   // Reconcile optimistic items whenever fresh server expenses arrive
   useEffect(() => {
-    const serverIds = new Set(expenses.map((e) => e.id));
+    const serverIds = new Set(loadedExpenses.map((e) => e.id));
     const remaining = getOptimisticExpenses(groupId).filter((item) => {
       if (serverIds.has(item.id)) {
         removeOptimisticExpense(groupId, item.id);
@@ -49,7 +60,7 @@ export default function GroupFeed({
       return true;
     });
     setOptimisticList(remaining);
-  }, [expenses, groupId]);
+  }, [loadedExpenses, groupId]);
 
   // Listen for real-time optimistic expenses dispatched on form submission
   useEffect(() => {
@@ -68,11 +79,11 @@ export default function GroupFeed({
 
   // Combine server expenses with any pending optimistic items (at the top)
   const combinedExpenses = useMemo(() => {
-    if (optimisticList.length === 0) return expenses;
-    const serverIds = new Set(expenses.map((e) => e.id));
+    if (optimisticList.length === 0) return loadedExpenses;
+    const serverIds = new Set(loadedExpenses.map((e) => e.id));
     const unconfirmed = optimisticList.filter((item) => !serverIds.has(item.id));
-    return [...unconfirmed, ...expenses];
-  }, [expenses, optimisticList]);
+    return [...unconfirmed, ...loadedExpenses];
+  }, [loadedExpenses, optimisticList]);
 
   // Materialise any due recurring expenses once when the group opens.
   useEffect(() => {
@@ -97,11 +108,27 @@ export default function GroupFeed({
     });
   }, [combinedExpenses, query, cat]);
 
-  const shown = filtered.slice(0, limit);
   const usedCategories = useMemo(() => {
     const set = new Set(combinedExpenses.map((e) => e.category));
     return allCategories.filter((c) => set.has(c.key));
   }, [combinedExpenses, allCategories]);
+
+  async function handleLoadMore() {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const res = await fetch(`/api/groups/${groupId}/expenses?offset=${loadedExpenses.length}&limit=25`);
+      const data = await res.json();
+      if (Array.isArray(data.expenses)) {
+        setLoadedExpenses((prev) => [...prev, ...data.expenses]);
+        setHasMore(data.hasMore);
+      }
+    } catch {
+      // Ignore network errors
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   return (
     <div className="px-4">
@@ -132,25 +159,26 @@ export default function GroupFeed({
         </div>
       )}
 
-      {shown.length === 0 ? (
+      {filtered.length === 0 ? (
         <div className="flex flex-col items-center gap-2 pt-16 text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-surface text-3xl">🧾</div>
           <p className="text-muted">{combinedExpenses.length === 0 ? "No expenses yet." : "No matches."}</p>
         </div>
       ) : (
         <ul className="flex flex-col">
-          {shown.map((exp) => (
+          {filtered.map((exp) => (
             <ExpenseRow key={exp.id} exp={exp} meId={meId} members={members} categories={groupCategories} />
           ))}
         </ul>
       )}
 
-      {filtered.length > limit && (
+      {hasMore && !query && !cat && (
         <button
-          onClick={() => setLimit((l) => l + PAGE)}
-          className="mx-auto my-4 block rounded-full border border-border px-5 py-2 text-sm font-medium text-muted"
+          onClick={handleLoadMore}
+          disabled={loadingMore}
+          className="mx-auto my-5 block rounded-full border border-border bg-surface px-6 py-2.5 text-sm font-semibold text-foreground active:bg-surface-elevated disabled:opacity-50"
         >
-          Load more ({filtered.length - limit})
+          {loadingMore ? "Loading..." : "Load more"}
         </button>
       )}
     </div>

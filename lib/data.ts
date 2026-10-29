@@ -10,10 +10,24 @@ import type {
   GroupBudget,
 } from "./types";
 
+export const DEFAULT_PAGE_SIZE = 25;
+
 export interface GroupMeta {
   group: Group;
   members: Profile[];
   categories: GroupCategory[];
+}
+
+export interface GroupBalanceExpense {
+  amount: number;
+  currency: string;
+  paid_by: string;
+  splits: { user_id: string; amount_owed: number }[];
+}
+
+export interface GroupBalanceData {
+  expenses: GroupBalanceExpense[];
+  settlements: Settlement[];
 }
 
 export interface GroupFeedData extends GroupMeta {
@@ -56,6 +70,31 @@ export const getGroupMeta = cache(async (groupId: string): Promise<GroupMeta | n
 });
 
 /**
+ * Loads minimal debt vectors (amount, currency, paid_by, and splits owed) to compute
+ * group balances and net summaries. Ultra-lightweight payload.
+ */
+export const getGroupBalanceData = cache(async (groupId: string): Promise<GroupBalanceData> => {
+  const supabase = await createClient();
+
+  const [{ data: expRows }, { data: settleRows }] = await Promise.all([
+    supabase
+      .from("expenses")
+      .select("amount, currency, paid_by, splits:expense_splits(user_id, amount_owed)")
+      .eq("group_id", groupId),
+    supabase
+      .from("settlements")
+      .select("*")
+      .eq("group_id", groupId)
+      .order("paid_on", { ascending: false }),
+  ]);
+
+  return {
+    expenses: (expRows ?? []) as unknown as GroupBalanceExpense[],
+    settlements: (settleRows ?? []) as unknown as Settlement[],
+  };
+});
+
+/**
  * Loads a single expense with its splits.
  * Much faster than loading the entire group feed when only one expense is needed.
  */
@@ -72,48 +111,58 @@ export const getSingleExpense = cache(async (expenseId: string): Promise<Expense
 });
 
 /**
- * Loads group data needed for the main feed (meta + expenses + settlements).
- * Excludes budgets to reduce query overhead.
+ * Loads paginated expenses for the feed with full display details.
  */
-export const getGroupFeedData = cache(async (groupId: string): Promise<GroupFeedData | null> => {
-  const supabase = await createClient();
-
-  const [meta, { data: expRows }, { data: settleRows }] = await Promise.all([
-    getGroupMeta(groupId),
-    supabase
+export const getGroupFeedExpenses = cache(
+  async (groupId: string, offset = 0, limit = DEFAULT_PAGE_SIZE): Promise<ExpenseWithSplits[]> => {
+    const supabase = await createClient();
+    const { data } = await supabase
       .from("expenses")
       .select("*, splits:expense_splits(*)")
       .eq("group_id", groupId)
       .order("expense_date", { ascending: false })
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("settlements")
-      .select("*")
-      .eq("group_id", groupId)
-      .order("paid_on", { ascending: false }),
-  ]);
+      .order("created_at", { ascending: false })
+      .range(offset, offset + limit - 1);
 
-  if (!meta) return null;
-
-  return {
-    ...meta,
-    expenses: (expRows ?? []) as unknown as ExpenseWithSplits[],
-    settlements: (settleRows ?? []) as unknown as Settlement[],
-  };
-});
+    return (data ?? []) as unknown as ExpenseWithSplits[];
+  },
+);
 
 /**
- * Load a group with members, expenses (+splits), settlements, categories, and budgets.
- * Returns null if the group doesn't exist or the user can't see it (RLS).
- *
- * One round-trip per relation, no per-row queries (no N+1). Payer/participant
- * profiles are resolved from the members list on the client, not re-fetched.
+ * Loads group data needed for the main feed with server-side limit.
+ */
+export const getGroupFeedData = cache(
+  async (groupId: string, limit = DEFAULT_PAGE_SIZE): Promise<GroupFeedData | null> => {
+    const supabase = await createClient();
+
+    const [meta, expRows, { data: settleRows }] = await Promise.all([
+      getGroupMeta(groupId),
+      getGroupFeedExpenses(groupId, 0, limit),
+      supabase
+        .from("settlements")
+        .select("*")
+        .eq("group_id", groupId)
+        .order("paid_on", { ascending: false }),
+    ]);
+
+    if (!meta) return null;
+
+    return {
+      ...meta,
+      expenses: expRows,
+      settlements: (settleRows ?? []) as unknown as Settlement[],
+    };
+  },
+);
+
+/**
+ * Load full group data with budgets.
  */
 export const getGroupData = cache(async (groupId: string): Promise<GroupData | null> => {
   const supabase = await createClient();
 
   const [feedData, { data: budgetRows }] = await Promise.all([
-    getGroupFeedData(groupId),
+    getGroupFeedData(groupId, 100),
     supabase.from("group_budgets").select("*").eq("group_id", groupId),
   ]);
 
