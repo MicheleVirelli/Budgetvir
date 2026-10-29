@@ -106,31 +106,31 @@ export default function ExpenseForm({
         expense_date: expenseDate,
       };
 
-      let expenseId = initial?.id;
-      if (editing) {
-        const { error: uErr } = await supabase.from("expenses").update(payload).eq("id", initial!.id);
-        if (uErr) throw uErr;
-        // Replace splits.
-        const { error: dErr } = await supabase.from("expense_splits").delete().eq("expense_id", initial!.id);
-        if (dErr) throw dErr;
-      } else {
-        const { data, error: iErr } = await supabase
-          .from("expenses")
-          .insert({ ...payload, group_id: groupId, created_by: meId })
-          .select("id")
-          .single();
-        if (iErr) throw iErr;
-        expenseId = data.id;
-      }
-
-      const splitRows = results.map((r) => ({
-        expense_id: expenseId,
+      const splitInputs = results.map((r) => ({
         user_id: r.userId,
         amount_owed: fromCents(r.owedCents),
         raw_value: r.rawValue,
       }));
-      const { error: sErr } = await supabase.from("expense_splits").insert(splitRows);
-      if (sErr) throw sErr;
+
+      // Atomic save via PostgreSQL function: inserts/updates expense and splits in a single transaction
+      const { data: savedId, error: rpcErr } = await supabase.rpc("save_expense_atomic", {
+        p_expense_id: editing ? initial!.id : null,
+        p_group_id: groupId,
+        p_title: payload.title,
+        p_emoji: payload.emoji,
+        p_category: payload.category,
+        p_amount: payload.amount,
+        p_currency: payload.currency,
+        p_paid_by: payload.paid_by,
+        p_split_type: payload.split_type,
+        p_receipt_url: payload.receipt_url,
+        p_notes: payload.notes,
+        p_expense_date: payload.expense_date,
+        p_splits: splitInputs,
+      });
+
+      if (rpcErr) throw rpcErr;
+      const expenseId = (savedId || initial?.id) as string;
 
       // If this expense came from a bank transaction, tag that transaction with
       // where it landed (the original stays in the channel). RLS scopes it to me.
@@ -157,9 +157,9 @@ export default function ExpenseForm({
         expense_date: payload.expense_date,
         created_by: initial?.created_by ?? meId,
         created_at: initial?.created_at ?? new Date().toISOString(),
-        splits: splitRows.map((r, idx) => ({
+        splits: splitInputs.map((r, idx) => ({
           id: `opt-${expenseId}-${idx}`,
-          expense_id: expenseId!,
+          expense_id: expenseId,
           user_id: r.user_id,
           amount_owed: r.amount_owed,
           raw_value: r.raw_value ?? null,
