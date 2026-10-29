@@ -167,6 +167,19 @@ export default function ExpenseForm({
       };
       saveOptimisticExpense(groupId, optimisticItem);
 
+      // Notify group members via Web Push (background, non-blocking)
+      const payerName = profileName(members.find((m) => m.id === paidBy));
+      fetch("/api/push/notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          groupId,
+          title: editing ? `Spesa aggiornata` : `Nuova spesa: ${payload.title}`,
+          body: `${payerName} ha registrato ${payload.amount} ${payload.currency} per "${payload.title}"`,
+          url: `/groups/${groupId}/expenses/${expenseId}`,
+        }),
+      }).catch(() => {});
+
       router.replace(editing ? `/groups/${groupId}/expenses/${expenseId}` : `/groups/${groupId}`);
       router.refresh();
     } catch (err) {

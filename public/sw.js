@@ -1,7 +1,6 @@
-// Budgetvir service worker — makes the app installable and gives the shell an
-// offline fallback. Data requests always hit the network (Supabase); only
-// same-origin static assets are cached.
-const CACHE = "budgetvir-v1";
+// Budgetvir service worker — makes the app installable, provides offline fallback,
+// and handles Web Push notifications.
+const CACHE = "budgetvir-v2";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/icon.svg", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -49,6 +48,59 @@ self.addEventListener("fetch", (event) => {
         })
         .catch(() => cached);
       return cached || network;
+    }),
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Web Push Notifications
+// ---------------------------------------------------------------------------
+
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+
+  let payload = {
+    title: "Budgetvir",
+    body: "Nuova attività nel gruppo",
+    icon: "/icon-192.png",
+    badge: "/icon-192.png",
+    url: "/",
+  };
+
+  try {
+    const json = event.data.json();
+    payload = { ...payload, ...json };
+  } catch {
+    payload.body = event.data.text();
+  }
+
+  const options = {
+    body: payload.body,
+    icon: payload.icon || "/icon-192.png",
+    badge: payload.badge || "/icon-192.png",
+    data: {
+      url: payload.url || "/",
+    },
+    vibrate: [100, 50, 100],
+  };
+
+  event.waitUntil(self.registration.showNotification(payload.title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = event.notification.data?.url || "/";
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url.includes(targetUrl) && "focus" in client) {
+          return client.focus();
+        }
+      }
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(targetUrl);
+      }
     }),
   );
 });

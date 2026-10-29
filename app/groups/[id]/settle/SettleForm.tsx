@@ -57,6 +57,21 @@ export default function SettleForm({
       setLoading(false);
       return;
     }
+
+    // Notify group members via Web Push
+    const fromName = profileName(members.find((m) => m.id === fromUser));
+    const toName = profileName(members.find((m) => m.id === toUser));
+    fetch("/api/push/notify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        groupId,
+        title: "Pagamento registrato 🤝",
+        body: `${fromName} ha pagato ${amountCents / 100} ${currency} a ${toName}`,
+        url: `/groups/${groupId}/balances`,
+      }),
+    }).catch(() => {});
+
     router.replace(`/groups/${groupId}/balances`);
     router.refresh();
   }

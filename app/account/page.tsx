@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getSessionProfile } from "@/lib/supabase/auth";
 import BottomNav from "@/components/BottomNav";
 import AccountForm from "./AccountForm";
+import PushNotificationManager from "@/components/PushNotificationManager";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,8 @@ export default async function AccountPage() {
 
       <main className="flex-1 px-4 pb-24">
         <AccountForm profile={profile} />
+
+        <PushNotificationManager />
 
         <Link
           href="/account/bank"
